@@ -390,7 +390,7 @@ const FILES = [
   // 座標はブログ地図のキャプション地名から割り当てた目安
   { id: "oak", genre: "jiken", region: "world", title: "オーク島マネー・ピット", date: "2026.10.01", stamp: "未解決",
     occurred: "1795年 夏", site: "カナダ・ノバスコシア州", place: "オーク島",
-    lng: -64.2995, lat: 44.5155, zoom: 14, pitch: 55, bearing: -30, url: "https://yohakukoubou.hatenablog.com/entry/2026/10/01/074004" },
+    lng: -64.2995, lat: 44.5155, zoom: 14, pitch: 55, bearing: -30, url: "article-oak.html" /* 記事ページの試作 */ },
   { id: "llorona", genre: "kaidan", region: "world", title: "ラ・ヨローナ", date: "2026.09.30", stamp: "伝承継続",
     occurred: "16世紀〜", site: "メキシコ・中米の水辺", place: "メキシコシティ",
     lng: -99.1036, lat: 19.2577, zoom: 13, pitch: 50, bearing: 15, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/30/073834" },
@@ -476,6 +476,7 @@ const CATS = [
   { key: "toshi",  label: "都市伝説ファイル", name: "都市伝説", hot: "#4fe08a" },
 ];
 const catOf = f => CATS.find(c => c.key === f.genre) || CATS[0];
+const linkTarget = url => /^https?:/.test(url) ? "_blank" : "_self";
 const regionName = f => f.region === "jp" ? "国内" : "海外";
 
 /* ロックオン後に出す「あらまし」と「残された問い」（下書き：記事本文に合わせて差し替える想定） */
@@ -824,7 +825,7 @@ function shelfHtml(f) {
 }
 function renderDetail(f) {
   const [sum, q] = DETAILS[f.id] || ["", ""];
-  const open = `<a class="open" href="${f.url}" target="_blank" rel="noopener">ファイルを開く →</a>`;
+  const open = `<a class="open" href="${f.url}" target="${linkTarget(f.url)}" rel="noopener">ファイルを開く →</a>`;
   return `<div class="card">
       <div class="hd"><span>調書 No.${fileNo(f)} ／ ${catOf(f).label}｜${regionName(f)}</span><button type="button" class="close" title="地球儀へ戻る（Esc）"><span class="long">ファイルを</span>閉じる ×</button></div>
       <h3>${f.title}${f.caution ? '<span class="caution">閲覧注意</span>' : ""}</h3>
@@ -895,7 +896,7 @@ FILES.forEach(f => {
     timer = setTimeout(() => { focusFile(f.id); homeAfterPlay = true; }, 350);
   });
   el.addEventListener("mouseleave", () => { if (current !== f.id) clearTimeout(timer); });
-  el.addEventListener("click", () => touchUI() ? tapFocus(f.id) : open(f.url, "_blank"));
+  el.addEventListener("click", () => touchUI() ? tapFocus(f.id) : open(f.url, linkTarget(f.url)));
   pins[f.id] = new maplibregl.Marker({ element: el }).setLngLat([f.lng, f.lat]).addTo(map);
 });
 
@@ -906,8 +907,22 @@ map.on("load", () => {
     paint: { "line-color": "#ff5a4a", "line-width": 1.6, "line-dasharray": [3, 2], "line-opacity": 0.9 } });
   // スマホは建物の輪郭と細い等高線を省いて、描画メモリを節約
   if (touchUI()) ["buildings", "contour-minor"].forEach(id => map.setLayoutProperty(id, "visibility", "none"));
-  spin();
+  const from = FILES.find(x => x.id === new URLSearchParams(location.search).get("from"));
+  if (from) returnFrom(from); else spin();
 });
+/* 記事ページの「書庫へ戻る」から来た時：読んでいた現場から、暗転しながら地球儀へ引いていく */
+function returnFrom(f) {
+  spinning = false;
+  map.jumpTo({ center: [f.lng, f.lat], zoom: f.zoom - (isMobile() ? 1 : 0), pitch: f.pitch, bearing: f.bearing });
+  $("veil").classList.add("on");
+  setTimeout(() => {
+    safeMove("easeTo", { center: [f.lng, Math.max(-25, Math.min(35, f.lat))], zoom: homeZoom(), pitch: 0, bearing: 0,
+      duration: reduceMotion ? 0 : T.flyOut, easing: t => 1 - Math.pow(1 - t, 3) });
+    setTimeout(() => $("veil").classList.remove("on"), T.flyOut * 0.45);
+    setTimeout(() => { spinning = !reduceMotion; spin(); }, T.flyOut + 50);
+  }, 600);
+  history.replaceState(null, "", location.pathname); // 再読み込みで繰り返さない
+}
 
 /* ===== ファイル一覧 ===== */
 const filesEl = $("files");
@@ -946,7 +961,7 @@ $("legend").addEventListener("click", e => {
 });
 FILES.forEach((f, i) => {
   const a = document.createElement("a");
-  a.className = "file cat-" + catOf(f).key + (f.caution ? " has-caution" : ""); a.href = f.url; a.target = "_blank"; a.rel = "noopener"; a.dataset.id = f.id;
+  a.className = "file cat-" + catOf(f).key + (f.caution ? " has-caution" : ""); a.href = f.url; a.target = linkTarget(f.url); a.rel = "noopener"; a.dataset.id = f.id;
   a.innerHTML = `
     <span class="tab">${catOf(f).label}｜${regionName(f)}</span>
     <div class="sheet">

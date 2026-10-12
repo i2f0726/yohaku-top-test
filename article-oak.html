@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow"><!-- テストページ：検索エンジンに登録しない -->
+<title>オーク島マネー・ピット ｜ 開かずの書庫</title>
+<meta name="description" content="1795年、カナダ・オーク島で見つかった地面のくぼみ。230年掘り続けても、まだ誰も底には届いていない。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600;900&family=Special+Elite&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07090c;
+    --ink: #e9e4d8;
+    --ink-dim: #8d8a82;
+    --line: rgba(233, 228, 216, .12);
+    --accent: #e0b25a;
+    --paper: #ece4d2;          /* 本文の紙 */
+    --paper-card: #d9cdb2;     /* 表紙・カード */
+    --paper-dark: #c4b593;
+    --paper-ink: #2a241b;
+    --paper-dim: #6e6455;
+    --red: #b3261e;
+    --hot: #ff5a4a;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Noto Serif JP", serif; }
+  a { color: inherit; }
+
+  /* ---------- 上部バー ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 20; height: 52px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 0 20px; background: rgba(7,9,12,.88); backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+  }
+  .back { font-size: 12px; letter-spacing: .15em; text-decoration: none; color: var(--ink-dim); white-space: nowrap; }
+  .back:hover { color: var(--ink); }
+  .brand { text-align: right; line-height: 1.2; text-decoration: none; }
+  .brand b { font-weight: 900; font-size: 15px; letter-spacing: .25em; }
+  .brand small { display: block; font-family: "Special Elite", monospace; font-size: 9px; letter-spacing: .38em; color: var(--accent); }
+  /* スクロールすると現れる、閲覧中のファイル */
+  .reading {
+    position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
+    font-size: 12px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .4s;
+  }
+  .reading.show { opacity: 1; }
+  .reading .no { font-family: "Special Elite", monospace; font-size: 10px; color: var(--ink-dim); letter-spacing: .1em; }
+  .reading .st { color: var(--hot); border: 1px solid var(--hot); font-size: 10px; font-weight: 900; padding: 0 5px; transform: rotate(-6deg); }
+  .progress { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0; background: var(--hot); }
+
+  /* ---------- ① ファイルの表紙（暗い書庫の上） ---------- */
+  .cover-wrap { padding: 46px 20px 30px; }
+  .cover {
+    position: relative; max-width: 760px; margin: 0 auto; padding-top: 22px; color: var(--paper-ink);
+  }
+  .cover .tab {
+    position: absolute; top: 0; left: 22px; height: 24px; padding: 3px 14px 0;
+    background: var(--paper-dark); border-radius: 6px 6px 0 0; font-size: 11px; font-weight: 600; letter-spacing: .12em;
+  }
+  .cover .sheet {
+    position: relative; background: var(--paper-card); border-radius: 2px 6px 6px 6px; padding: 26px 30px 24px;
+    box-shadow: 0 2px 0 rgba(0,0,0,.25), 0 24px 60px rgba(0,0,0,.6), -4px 0 0 var(--red);
+    background-image: radial-gradient(circle at 85% 15%, rgba(120,90,40,.2), transparent 40%),
+                      radial-gradient(circle at 8% 92%, rgba(90,60,20,.15), transparent 35%);
+  }
+  .cover .no { font-family: "Special Elite", monospace; font-size: 12px; letter-spacing: .12em; opacity: .65; }
+  .cover h1 { margin: 6px 7em 16px 0; font-size: clamp(26px, 5vw, 36px); font-weight: 900; letter-spacing: .06em; line-height: 1.35; }
+  .cover dl { margin: 0; display: grid; grid-template-columns: 4.2em 1fr; gap: 6px 14px; font-size: 14px; border-top: 1px solid rgba(42,36,27,.25); padding-top: 14px; }
+  .cover dt { font-weight: 600; opacity: .55; }
+  .cover dd { margin: 0; }
+  .stamp {
+    position: absolute; right: 26px; top: 30px; border: 3px solid var(--red); color: var(--red);
+    padding: 4px 14px; font-weight: 900; font-size: 20px; letter-spacing: .2em;
+    transform: rotate(-9deg); opacity: .8; border-radius: 3px; mix-blend-mode: multiply;
+  }
+  .points { margin: 18px 0 0; padding: 14px 16px; background: rgba(255,255,255,.22); border-left: 3px solid var(--red); font-size: 14px; line-height: 1.9; }
+  .points b { display: block; font-size: 11px; letter-spacing: .2em; opacity: .65; margin-bottom: 4px; }
+  .points ol { margin: 0; padding-left: 1.4em; }
+
+  /* ---------- ② 現場の地図 ---------- */
+  .site { max-width: 760px; margin: 26px auto 0; }
+  .site-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 12px; color: var(--ink-dim); letter-spacing: .12em; margin-bottom: 8px; }
+  .site-head .coord { font-family: "Special Elite", monospace; color: var(--accent); }
+  .mapbox { position: relative; height: 340px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: #0c131b; }
+  #map { position: absolute; inset: 0; }
+  .mapbox::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0,0,0,.55) 100%); }
+  .ring { position: absolute; left: 50%; top: 50%; pointer-events: none; z-index: 2; transform: translate(-50%, -50%); }
+  .ring i { position: absolute; left: 50%; top: 50%; border: 1px solid rgba(233,220,188,.55); border-radius: 50%; transform: translate(-50%, -50%); }
+  .ring i:nth-child(1) { width: 60px; height: 60px; }
+  .ring i:nth-child(2) { width: 160px; height: 160px; border-style: dashed; opacity: .6; }
+  .ring b { position: absolute; left: -5px; top: -5px; width: 10px; height: 10px; border-radius: 50%; background: var(--hot); box-shadow: 0 0 12px var(--hot); }
+  .ring em {
+    position: absolute; left: -32px; top: -32px; width: 64px; height: 64px; border: 1.5px solid var(--hot); border-radius: 50%;
+    animation: ping 2.6s ease-out infinite; opacity: 0;
+  }
+  @keyframes ping { 0% { transform: scale(.2); opacity: .9; } 100% { transform: scale(1.6); opacity: 0; } }
+  .map-btn {
+    position: absolute; z-index: 3; right: 10px; bottom: 10px; font: 600 11px "Noto Serif JP", serif; letter-spacing: .1em;
+    color: var(--ink); background: rgba(7,9,12,.75); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer;
+  }
+  .map-btn:hover { border-color: var(--accent); }
+  .map-note { margin-top: 6px; font-size: 10px; color: var(--ink-dim); }
+
+  /* ---------- 本文（明るい紙） ---------- */
+  .paper { background: var(--paper); color: var(--paper-ink); margin-top: 46px; padding: 56px 20px 70px;
+           box-shadow: 0 -30px 60px rgba(0,0,0,.5); }
+  .body { max-width: 40em; margin: 0 auto; font-size: 16.5px; line-height: 2; letter-spacing: .03em; }
+  .body p { margin: 0 0 1.4em; }
+  .sec { display: flex; align-items: baseline; gap: 12px; margin: 3.2em 0 1.2em; padding-bottom: 8px; border-bottom: 1px solid rgba(42,36,27,.25); }
+  .sec:first-child { margin-top: 0; }
+  .sec span { font-family: "Special Elite", monospace; font-size: 12px; color: var(--red); letter-spacing: .15em; }
+  .sec h2 { margin: 0; font-size: 21px; font-weight: 900; letter-spacing: .08em; }
+
+  /* 年表 */
+  .timeline { list-style: none; margin: 0 0 2em; padding: 0 0 0 0; position: relative; }
+  .timeline::before { content: ""; position: absolute; left: 4.6em; top: .6em; bottom: .6em; border-left: 1px dashed rgba(42,36,27,.4); }
+  .timeline li { display: grid; grid-template-columns: 4.2em 1fr; gap: 0 1.4em; padding: 4px 0; font-size: 14.5px; line-height: 1.7; position: relative; }
+  .timeline .y { font-family: "Special Elite", monospace; font-size: 13px; color: var(--paper-dim); text-align: right; padding-top: 2px; }
+  .timeline li::after { content: ""; position: absolute; left: calc(4.6em - 4px); top: .75em; width: 7px; height: 7px; border-radius: 50%; background: var(--paper); border: 1.5px solid var(--paper-dim); }
+  .timeline li.dead::after { background: var(--red); border-color: var(--red); }
+  .timeline li.dead .t { color: var(--red); }
+
+  /* 写真 */
+  figure { margin: 2.2em 0; }
+  figure img { width: 100%; display: block; filter: sepia(.25) contrast(1.05); border: 1px solid rgba(42,36,27,.3); box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+  figcaption { margin-top: 8px; font-size: 12px; line-height: 1.7; color: var(--paper-dim); }
+
+  /* 仮説カード */
+  .hypos { display: grid; gap: 12px; margin: 0 0 2.2em; }
+  .hypo { position: relative; background: rgba(255,255,255,.35); border: 1px solid rgba(42,36,27,.2); border-radius: 3px; padding: 14px 16px 12px; }
+  .hypo h3 { margin: 0 6.5em 6px 0; font-size: 15.5px; font-weight: 900; letter-spacing: .05em; }
+  .hypo p { margin: 0; font-size: 13.5px; line-height: 1.8; }
+  .hypo .lv {
+    position: absolute; right: 12px; top: 12px; font-size: 11px; font-weight: 900; letter-spacing: .12em; padding: 1px 7px;
+    border: 1.5px solid currentColor; border-radius: 2px; transform: rotate(-5deg);
+  }
+  .lv.ok  { color: #2f5d3a; }   /* 記録あり */
+  .lv.mid { color: #8a5a12; }   /* 議論中 */
+  .lv.low { color: var(--red); } /* 根拠薄い */
+  .legend-lv { font-size: 11.5px; color: var(--paper-dim); margin: -.6em 0 1em; }
+
+  /* 残された問い */
+  .question {
+    position: relative; margin: 3em 0 2.4em; padding: 26px 24px 20px; background: var(--paper-card);
+    border: 1px solid rgba(42,36,27,.3); box-shadow: 0 10px 26px rgba(0,0,0,.15);
+  }
+  .question .label { font-family: "Special Elite", monospace; font-size: 11px; letter-spacing: .25em; color: var(--red); }
+  .question .final { font-size: 19px; font-weight: 900; line-height: 1.8; margin: 8px 5.5em 14px 0; letter-spacing: .04em; }
+  .question ul { margin: 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.9; }
+  .question li::before { content: "□ "; color: var(--paper-dim); }
+  .question .stamp { top: 22px; right: 20px; font-size: 15px; padding: 3px 10px; border-width: 2.5px; }
+
+  /* 関連資料の棚 */
+  .shelf { margin: 0 0 2.4em; padding-top: 14px; border-top: 1px dashed rgba(42,36,27,.35); }
+  .shelf .sh { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; font-weight: 600; letter-spacing: .1em; color: var(--paper-dim); margin-bottom: 8px; }
+  .shelf .pr { font-family: "Special Elite", monospace; font-size: 10px; border: 1px solid currentColor; border-radius: 2px; padding: 0 5px; }
+  .shelf a { display: flex; align-items: center; gap: 12px; text-decoration: none; padding: 10px 12px; margin-top: 6px; background: rgba(255,255,255,.35); border: 1px solid rgba(42,36,27,.18); border-radius: 3px; transition: border-color .2s, transform .2s; }
+  .shelf a:hover { border-color: var(--red); transform: translateX(3px); }
+  .shelf .type { flex: none; font-size: 11px; font-weight: 900; color: var(--red); border: 1.4px solid var(--red); border-radius: 2px; padding: 0 5px; transform: rotate(-4deg); }
+  .shelf .ti { display: block; font-size: 14px; font-weight: 600; line-height: 1.5; }
+  .shelf .nt { display: block; font-size: 12px; color: var(--paper-dim); line-height: 1.5; }
+  .shelf .go { margin-left: auto; color: var(--paper-dim); }
+
+  /* 広告枠（見本） */
+  .ad { margin: 2.4em 0; height: 120px; display: grid; place-items: center; border: 1px dashed rgba(42,36,27,.35); color: var(--paper-dim); font-size: 11px; letter-spacing: .2em; background: rgba(255,255,255,.2); }
+
+  .sources { font-size: 12px; line-height: 1.8; color: var(--paper-dim); border-top: 1px solid rgba(42,36,27,.2); padding-top: 14px; }
+  .sources b { display: block; letter-spacing: .2em; margin-bottom: 4px; }
+
+  /* ---------- 次のファイル ---------- */
+  .next { background: var(--bg); padding: 50px 20px 70px; }
+  .next-in { max-width: 760px; margin: 0 auto; }
+  .next h2 { font-family: "Special Elite", monospace; font-weight: 400; font-size: 13px; letter-spacing: .25em; color: var(--ink-dim); margin: 0 0 16px; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 22px; }
+  .col h3 { margin: 0 0 10px; font-size: 13px; letter-spacing: .15em; color: var(--ink); font-weight: 600; }
+  .mini { display: block; position: relative; text-decoration: none; color: var(--paper-ink); margin-bottom: 10px; padding-top: 12px; }
+  .mini .tb { position: absolute; top: 0; left: 10px; height: 14px; padding: 0 8px; font-size: 9px; font-weight: 600; letter-spacing: .1em; line-height: 14px; background: var(--paper-dark); border-radius: 4px 4px 0 0; }
+  .mini .sh2 { background: var(--paper-card); border-radius: 2px 4px 4px 4px; padding: 8px 12px 9px; box-shadow: 0 6px 14px rgba(0,0,0,.45); transition: transform .3s; }
+  .mini:hover .sh2 { transform: translateX(4px); }
+  .mini .t { font-size: 14px; font-weight: 900; }
+  .mini .m { font-size: 11px; opacity: .7; }
+  .mini.kaidan .tb { background: #a6abbd; } .mini.kaidan .sh2 { background: #c8ccd6; }
+  .return { display: block; margin: 34px auto 0; max-width: 360px; text-align: center; text-decoration: none; padding: 14px; border: 1px solid var(--line); border-radius: 4px; letter-spacing: .2em; font-size: 13px; color: var(--ink); }
+  .return:hover { border-color: var(--accent); }
+  .return small { display: block; font-family: "Special Elite", monospace; color: var(--accent); font-size: 10px; letter-spacing: .3em; margin-top: 4px; }
+  footer { text-align: center; font-size: 10px; color: var(--ink-dim); padding: 0 0 30px; line-height: 1.8; }
+
+  /* ---------- スマホ ---------- */
+  @media (max-width: 640px) {
+    .topbar { padding: 0 14px; }
+    .reading .no { display: none; }
+    .reading { left: auto; right: 14px; transform: none; }
+    .reading.show ~ .brand { opacity: 0; }
+    .cover-wrap { padding: 30px 14px 20px; }
+    .cover .sheet { padding: 22px 18px 18px; }
+    .cover h1 { margin-right: 0; margin-top: 40px; }
+    .stamp { right: 16px; top: 18px; font-size: 16px; }
+    .cover dl { font-size: 13px; grid-template-columns: 3.6em 1fr; }
+    .mapbox { height: 260px; }
+    .paper { padding: 40px 16px 50px; }
+    .body { font-size: 16px; line-height: 1.95; }
+    .question .final { margin-right: 0; margin-top: 40px; font-size: 17px; }
+    .hypo h3 { margin-right: 0; margin-top: 22px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .ring em { animation: none; } html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="back" href="index.html?from=oak">← 書庫へ戻る</a>
+  <div class="reading" id="reading">
+    <span class="no">FILE No.024</span><span>オーク島マネー・ピット</span><span class="st">未解決</span>
+  </div>
+  <a class="brand" href="index.html"><b>開かずの書庫</b><small>AKAZU NO SHOKO</small></a>
+  <div class="progress" id="progress"></div>
+</header>
+
+<!-- ① ファイルの表紙 -->
+<section class="cover-wrap">
+  <div class="cover" id="cover">
+    <span class="tab">事件ファイル｜海外</span>
+    <div class="sheet">
+      <div class="no">FILE No.024 ／ 2026.10.01</div>
+      <h1>オーク島マネー・ピット</h1>
+      <span class="stamp">未解決</span>
+      <dl>
+        <dt>発生</dt><dd>1795年 夏</dd>
+        <dt>現場</dt><dd>カナダ・ノバスコシア州 マホーン湾のオーク島</dd>
+        <dt>発見者</dt><dd>青年ダニエル・マッギニス</dd>
+        <dt>犠牲</dt><dd>捜索中の事故で 6人が死亡</dd>
+        <dt>経過</dt><dd>230年、いまも掘削が続く</dd>
+      </dl>
+      <div class="points">
+        <b>この調書の論点</b>
+        <ol>
+          <li>地面のくぼみは、人が掘った跡だったのか。</li>
+          <li>「印」はいつから「オーク材の床」になったのか。</li>
+          <li>海岸の排水トンネルは、誰が何のために造ったのか。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ② 現場の地図 -->
+  <div class="site">
+    <div class="site-head"><span>現場 ── オーク島</span><span class="coord">N 44.5155° ／ W 64.2995°</span></div>
+    <div class="mapbox">
+      <div id="map" aria-label="オーク島の位置を示す線画の地図"></div>
+      <div class="ring" aria-hidden="true"><i></i><i></i><em></em><b></b></div>
+      <button class="map-btn" id="mapBtn" type="button">地図を動かす</button>
+    </div>
+    <div class="map-note">地図データ: OpenFreeMap © OpenMapTiles © OpenStreetMap contributors ／ 標高: Mapzen / AWS Terrain Tiles</div>
+  </div>
+</section>
+
+<!-- 本文（明るい紙） -->
+<main class="paper">
+  <article class="body">
+
+    <div class="sec"><span>01</span><h2>事実整理</h2></div>
+
+    <ol class="timeline" aria-label="年表">
+      <li><span class="y">1795</span><span class="t">青年ダニエル・マッギニスが、すり鉢状のくぼみを発見</span></li>
+      <li><span class="y">1803</span><span class="t">オンスロー社が掘削。90フィートで記号の刻まれた石板</span></li>
+      <li class="dead"><span class="y">1861</span><span class="t">ボイラーの爆発で1人が死亡</span></li>
+      <li><span class="y">1862</span><span class="t">石板のことが、はじめて新聞に載る</span></li>
+      <li class="dead"><span class="y">1897</span><span class="t">メイナード・カイザーがシャフトから転落死</span></li>
+      <li><span class="y">1909</span><span class="t">27歳のフランクリン・D・ルーズベルトが捜索団に参加</span></li>
+      <li class="dead"><span class="y">1965</span><span class="t">シャフト内の硫化水素ガスで4人が死亡</span></li>
+      <li><span class="y">2006</span><span class="t">ラジーナ兄弟が捜索を主導。現代的な探査を投入</span></li>
+    </ol>
+
+    <p>カナダ東海岸、ノバスコシア州のマホーン湾に浮かぶ小さな島、オーク島。1795年の夏、農地を探していた青年ダニエル・マッギニスが、木々の中にすり鉢状にくぼんだ地面を見つけた。掘り進めると、地表から2フィートの場所で平らな石の層が現れ、さらに下へ掘ると一定の深さごとに何らかの「印」があったという。後年の語りではこれが「オーク材の床」として繰り返し描かれるようになるが、最も古い記録はただ「印」としか書いていない。三人の若者は30フィートまで掘ったところで、得体の知れない不安に駆られて作業を止めたと伝えられている。</p>
+
+    <p>1803年から04年にかけて、地元の投資会社オンスロー社がこの穴を再び掘り進めた。90フィートの地点で、緑がかった石板が見つかる。表面には二行、未解読の記号が刻まれていたという。この石自体は1804年に発見されながら、公に記録されたのは1862年の新聞記事が最初で、実物は20世紀初頭までに行方不明になっている。同じ時期、島の反対側のスミス・コーブでは、ココナッツ繊維を使った濾水層と排水溝を組み合わせた「洪水トンネル」が見つかった。これは1795年より前から存在していたとみられる、明らかに人の手による構造物である。</p>
+
+    <p>以来230年、穴は幾度も掘り直され、崩落し、位置さえ確定できなくなった。捜索の過程で6人が命を落としている。1861年、ボイラーの爆発で1人。1897年、シャフトから落下したメイナード・カイザー。1965年には、ロバート・レストールとその息子ボビー、カール・グレーザー、シリル・ヒルツの4人が、シャフト内の硫化水素ガスで一度に死亡した。「7人目が死んだとき宝は見つかる」という呪いの言い伝えがあるが、これがいつ、誰によって語られ始めたのかを示す一次資料は存在しない。</p>
+
+    <figure>
+      <img src="https://upload.wikimedia.org/wikipedia/commons/0/09/Photograph_of_Franklin_D._Roosevelt_and_Others_at_Oak_Island_in_Nova_Scotia_-_NARA_-_196803.jpg"
+           alt="1909年、オーク島の捜索団の写真（後にアメリカ大統領となるフランクリン・D・ルーズベルトも参加していた）" loading="lazy">
+      <figcaption>1909年、オーク島の捜索団。後に合衆国大統領となるフランクリン・D・ルーズベルトも加わっていた。<br>写真：撮影者不明（アメリカ国立公文書記録管理局所蔵）／Wikimedia Commons（Public Domain）</figcaption>
+    </figure>
+
+    <p>1909年には、ボードイン船長率いる別の捜索団に、当時27歳のハーバード大学卒業生が加わっていた。後に合衆国大統領となるフランクリン・デラノ・ルーズベルトである。彼は大統領になった後も島の動向を気にかけていたと伝えられ、現地には当時の捜索団を写した写真が残っている。2006年からは実業家のリック・ラジーナとマーティ・ラジーナ兄弟が捜索を主導し、地中探査レーダーや地震波探査、コアサンプリング、DNA鑑定といった現代的手法を投入してきた。番組を通じて古銭や人骨の断片などは見つかっているが、「これだ」と言える単一の財宝には、いまも誰も到達していない。</p>
+
+    <div class="ad">広告枠（見本） ── 事実整理のあと</div>
+
+    <div class="sec"><span>02</span><h2>考察</h2></div>
+
+    <div class="hypos">
+      <div class="hypo">
+        <h3>財宝説</h3><span class="lv low">根拠薄い</span>
+        <p>キャプテン・キッドの隠し財産から、マリー・アントワネットの宝石、シェイクスピアの原稿、テンプル騎士団の聖杯まで。時代ごとに中身が入れ替わり、裏づける一次資料はない。</p>
+      </div>
+      <div class="hypo">
+        <h3>地質学説（自然の陥没）</h3><span class="lv mid">議論中</span>
+        <p>地下の石灰岩・石膏質の地層が溶けてできた穴とする説。本土にも似た地形がある一方、海岸の排水トンネルは説明できない。</p>
+      </div>
+      <div class="hypo">
+        <h3>折衷説</h3><span class="lv mid">議論中</span>
+        <p>もともとあった自然の空洞に、後から誰かが手を加えた。人の痕跡と自然の地形が、否定し合わずに重なっている可能性。</p>
+      </div>
+    </div>
+    <p class="legend-lv">※ 判子は根拠の強さの目安（記録あり／議論中／根拠薄い）。真相を断定するものではありません。</p>
+
+    <p>オーク島をめぐる説は、大きく二つに分かれる。ひとつは財宝説で、17世紀に処刑された海賊キャプテン・キッドの隠し財産という古典的な語りから始まり、後にはフランス王妃マリー・アントワネットの宝石、あるいはシェイクスピア作品の真の著者性を証明する原稿、さらにはテンプル騎士団が守った聖杯や聖櫃といった説まで枝分かれしていった。もうひとつは地質学的な説明で、炭酸塩岩研究者スティーブン・エイトキンらは、島の地下が石灰岩と石膏質の地層であり、水に溶けやすいこの岩盤が陥没して自然にできた穴だと主張する。実際、ノバスコシア本土にも似た陥没地形がいくつも見つかっている。</p>
+
+    <p>ただしこの地質学的な説明は、スミス・コーブの洪水トンネルという一点だけをうまく説明できない。あの排水構造は、自然にできたにしては都合がよすぎるほど精巧で、誰かが意図的に設計したようにしか見えない。つまりこの島には、「人の手が加わった痕跡」と「自然にできた陥没地形」の両方が、否定し合わずに同じ場所に重なっている可能性がある。財宝説と地質学説のどちらか一方が正しいのではなく、もともとあった自然の空洞に、後から誰かが手を加えた ― という折衷案さえ成り立ってしまう場所なのだ。</p>
+
+    <p>財宝説の中身が時代とともに変わっていく点も興味深い。海賊の時代にはキッドの金貨が語られ、シェイクスピア作者論が世を賑わせた19世紀末から20世紀初頭にはベーコンの原稿説が持ち出され、聖杯や陰謀論が大衆文化に浸透した近年はテンプル騎士団説が語られる。掘っても掘っても何も出てこない穴を前に、人々はそのときどきの時代が一番欲しがっているものを、そこに埋め直しているようにも見える。</p>
+
+    <p>ルーズベルトの逸話も同じ構造の一部だろう。将来大統領になる青年が一時期この穴に関わっていたという事実は、それ自体は財宝の存在を何ら証明しない。しかし「あの人物さえ本気にした」という語りが加わることで、穴はいっそう「本物らしく」感じられてしまう。謎そのものの強度と、それを取り巻く語りの強度は、必ずしも一致しない。</p>
+
+    <div class="sec"><span>03</span><h2>残された問い</h2></div>
+
+    <p>230年、少なくとも6人の命、そして記録に残らないほどの資金が、この穴に注ぎ込まれてきた。それでもまだ誰も底には届いていない。</p>
+
+    <div class="question">
+      <div class="label">UNRESOLVED ── 未解決の問い</div>
+      <div class="final">もし本当に何もなかったとしたら、人々はいったい何を掘り続けてきたことになるのだろうか。</div>
+      <span class="stamp">未解決</span>
+      <ul>
+        <li>地面のくぼみは、人が掘った跡だったのか。</li>
+        <li>「印」はいつから「オーク材の床」になったのか。</li>
+        <li>海岸の排水トンネルは、誰が何のために造ったのか。</li>
+      </ul>
+    </div>
+
+    <div class="shelf">
+      <div class="sh"><span>関連資料 ── この事件をもっと知る</span><span class="pr">PR</span></div>
+      <a href="https://www.amazon.co.jp/s?k=%E3%82%AA%E3%83%BC%E3%82%AF%E5%B3%B6%20%E5%AE%9D" target="_blank" rel="noopener sponsored">
+        <span class="type">書籍</span><span><span class="ti">オーク島の宝探しを追った本</span><span class="nt">230年の掘削の歴史をまとめて（見本）</span></span><span class="go">→</span>
+      </a>
+      <a href="https://www.amazon.co.jp/s?k=%E3%82%AA%E3%83%BC%E3%82%AF%E5%B3%B6%E3%81%AE%E5%91%AA%E3%81%84" target="_blank" rel="noopener sponsored">
+        <span class="type">映像</span><span><span class="ti">オーク島の発掘を追う番組</span><span class="nt">現在も続く掘削の現場（見本）</span></span><span class="go">→</span>
+      </a>
+    </div>
+
+    <div class="ad">広告枠（見本） ── 記事の最後</div>
+
+    <div class="sources">
+      <b>出典</b>
+      Rupert Furneaux『The Money Pit Mystery: The Costliest Treasure Hunt Ever』(1972)／D'Arcy O'Connor『The Secret Treasure of Oak Island』(Formac/Lorimer, 2018)／Randall Sullivan『The Curse of Oak Island: The Story of the World's Longest Treasure Hunt』(Grove Press, 2018)／地質学者 Steven Aitken による石灰岩・石膏質地盤の陥没説（Critical Enquiry 等で紹介）
+    </div>
+  </article>
+</main>
+
+<!-- ⑦ 次のファイル -->
+<section class="next">
+  <div class="next-in">
+    <h2>NEXT FILES</h2>
+    <div class="cols">
+      <div class="col">
+        <h3>近くの現場</h3>
+        <div id="near"></div>
+      </div>
+      <div class="col">
+        <h3>同じ棚のファイル</h3>
+        <div id="same"></div>
+      </div>
+    </div>
+    <a class="return" href="index.html?from=oak">書庫へ戻る<small>BACK TO THE ARCHIVE</small></a>
+  </div>
+</section>
+<footer>※テストページ（記事ページの試作）。本文は「余白工房」2026.10.01 の記事より。<br>運営：余白工房</footer>
+
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/maplibre-contour@0.1.0/dist/index.min.js" crossorigin="anonymous"></script>
+<script>
+const SITE = { lng: -64.2995, lat: 44.5155 };
+
+/* ===== 次のファイル（本番は WordPress の記事データから作る） ===== */
+const OTHERS = [
+  { title: "ヴォイニッチ手稿", genre: "jiken", region: "海外", meta: "15世紀前半 ／ アメリカ・イェール大学", lng: -72.9273, lat: 41.3113, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/21/074123" },
+  { title: "バミューダ・トライアングル", genre: "jiken", region: "海外", meta: "1918年〜 ／ 北大西洋", lng: -71.5, lat: 25.6, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/29/074344" },
+  { title: "ベル・ウィッチ", genre: "kaidan", region: "海外", meta: "1817年〜1821年 ／ アメリカ・テネシー州", lng: -87.0606, lat: 36.5877, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/10/223111" },
+  { title: "D.B.クーパー事件", genre: "jiken", region: "海外", meta: "1971年 11月 ／ アメリカ", lng: -122.56, lat: 45.95, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/22/074123" },
+  { title: "メアリー・セレスト号事件", genre: "jiken", region: "海外", meta: "1872年 12月 ／ 大西洋 アゾレス諸島の沖", lng: -17.25, lat: 38.33, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/14/074130" },
+  { title: "フラナン諸島 灯台守失踪事件", genre: "jiken", region: "海外", meta: "1900年 12月 ／ スコットランド北西", lng: -7.589, lat: 58.288, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/10/225000" },
+];
+const km = (a, b) => { // 2地点間の距離（km）
+  const r = Math.PI / 180, R = 6371;
+  const d = Math.sin((b.lat - a.lat) * r / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin((b.lng - a.lng) * r / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(d));
+};
+const mini = (f, extra) => `<a class="mini ${f.genre}" href="${f.url}" target="_blank" rel="noopener">
+  <span class="tb">${f.genre === "kaidan" ? "禁書の棚" : "事件ファイル"}｜${f.region}</span>
+  <div class="sh2"><div class="t">${f.title}</div><div class="m">${extra || f.meta}</div></div></a>`;
+document.getElementById("near").innerHTML = OTHERS.map(f => ({ f, d: km(SITE, f) }))
+  .sort((a, b) => a.d - b.d).slice(0, 3)
+  .map(({ f, d }) => mini(f, `ここから 約${(Math.round(d / 100) * 100).toLocaleString()}km ／ ${f.meta}`)).join("");
+document.getElementById("same").innerHTML = OTHERS.filter(f => f.genre === "jiken")
+  .filter(f => ["メアリー・セレスト号事件", "フラナン諸島 灯台守失踪事件", "D.B.クーパー事件"].includes(f.title)).map(f => mini(f)).join("");
+
+/* ===== 閲覧中の表示と、読み進め具合 ===== */
+const reading = document.getElementById("reading"), progress = document.getElementById("progress");
+const cover = document.getElementById("cover"), paper = document.querySelector(".paper");
+function onScroll() {
+  reading.classList.toggle("show", cover.getBoundingClientRect().bottom < 60);
+  const r = paper.getBoundingClientRect();
+  const p = Math.min(1, Math.max(0, (innerHeight - r.top) / (r.height + innerHeight * .2)));
+  progress.style.width = (p * 100).toFixed(1) + "%";
+}
+addEventListener("scroll", onScroll, { passive: true }); onScroll();
+
+/* ===== 現場の地図：画面に入ったら読み込み、地球から現場へ降りる ===== */
+const touch = matchMedia("(hover: none), (pointer: coarse)").matches;
+let map;
+const io = new IntersectionObserver(es => { if (es[0].isIntersecting) { io.disconnect(); initMap(); } }, { rootMargin: "200px" });
+io.observe(document.getElementById("map"));
+
+function initMap() {
+  const dem = new mlcontour.DemSource({
+    url: "https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png", encoding: "terrarium", maxzoom: 13, worker: true
+  });
+  dem.setupMaplibre(maplibregl);
+  const LINE = "#e9dcbc", BLUE = "#8fb3d9";
+  map = new maplibregl.Map({
+    container: "map", center: [SITE.lng, SITE.lat], zoom: 3, attributionControl: false,
+    pixelRatio: Math.min(devicePixelRatio || 1, 2),
+    style: {
+      version: 8, projection: { type: "globe" },
+      sources: {
+        omt: { type: "vector", url: "https://tiles.openfreemap.org/planet" },
+        contours: { type: "vector", maxzoom: 15, tiles: [dem.contourProtocolUrl({
+          thresholds: { 8: [200, 1000], 10: [100, 500], 11: [50, 250], 13: [20, 100], 14: [10, 50] },
+          elevationKey: "ele", levelKey: "level", contourLayer: "contours" })] }
+      },
+      layers: [
+        { id: "bg", type: "background", paint: { "background-color": "#0c131b" } },
+        { id: "water", type: "fill", source: "omt", "source-layer": "water", paint: { "fill-color": "#13263a" } },
+        { id: "contour", type: "line", source: "contours", "source-layer": "contours", minzoom: 8,
+          paint: { "line-color": LINE, "line-width": ["case", [">", ["get", "level"], 0], 1, .5], "line-opacity": ["case", [">", ["get", "level"], 0], .55, .25] } },
+        { id: "waterway", type: "line", source: "omt", "source-layer": "waterway", paint: { "line-color": BLUE, "line-width": .8, "line-opacity": .7 } },
+        { id: "roads", type: "line", source: "omt", "source-layer": "transportation", paint: { "line-color": LINE, "line-width": ["interpolate", ["linear"], ["zoom"], 8, .4, 16, 1.6], "line-opacity": .7 } },
+        { id: "buildings", type: "fill", source: "omt", "source-layer": "building", minzoom: 14, paint: { "fill-color": "rgba(0,0,0,0)", "fill-outline-color": "rgba(233,220,188,.55)" } }
+      ],
+      sky: { "sky-color": "#0b1a2e", "horizon-color": "#2a4a6e", "fog-color": "#0b1a2e", "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, .8, 6, 0] }
+    }
+  });
+  // ふだんは操作を止めておく（スクロールの邪魔をしない）。「地図を動かす」で有効にする
+  ["dragPan", "scrollZoom", "touchZoomRotate", "doubleClickZoom", "dragRotate", "keyboard", "touchPitch"].forEach(h => map[h].disable());
+  map.on("load", () => {
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    map.easeTo({ zoom: touch ? 12.5 : 13.5, pitch: 45, bearing: -30, duration: still ? 0 : 3200,
+                 easing: t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2 });
+  });
+}
+/* 地図はふだん止めておき（スクロールの邪魔をしない）、ボタンで操作できるようにする */
+document.getElementById("mapBtn").addEventListener("click", e => {
+  if (!map) return;
+  const on = !map.dragPan.isEnabled();
+  ["dragPan", "scrollZoom", "touchZoomRotate", "doubleClickZoom"].forEach(h => on ? map[h].enable() : map[h].disable());
+  if (on) map.touchZoomRotate.disableRotation();
+  e.currentTarget.textContent = on ? "地図を止める" : "地図を動かす";
+});
+</script>
+</body>
+</html>
