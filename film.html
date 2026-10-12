@@ -24,55 +24,24 @@
   .layer { position: absolute; inset: 0; z-index: 5; pointer-events: none; opacity: 0; transition: opacity .9s ease; }
   .layer.on { opacity: 1; }
 
-  /* ① 書庫の両開きの扉（閂が外れ、合わせ目から光が漏れ、奥へ開く） */
-  #intro { opacity: 1; z-index: 8; perspective: calc(var(--u) * 260); transition: opacity .8s ease; }
-  #intro.off { opacity: 0; }
-  .door {
-    position: absolute; top: 0; bottom: 0; width: 50.5%;
-    background:
-      linear-gradient(90deg, rgba(0,0,0,.35), transparent 18%, transparent 82%, rgba(0,0,0,.35)),
-      repeating-linear-gradient(90deg, #2a1f17 0, #2a1f17 calc(var(--u) * 7.6), #221912 calc(var(--u) * 7.6), #221912 calc(var(--u) * 8)),
-      #261c15;
-    box-shadow: inset 0 0 calc(var(--u) * 10) rgba(0,0,0,.8);
-    transition: transform 1.7s cubic-bezier(.55,.05,.35,1);
-  }
-  .door.l { left: 0; transform-origin: left center; }
-  .door.r { right: 0; transform-origin: right center; }
-  /* 扉の枠（上下2枚の鏡板）と鉄の鋲 */
-  .door::before, .door::after {
-    content: ""; position: absolute; left: 12%; right: 12%;
-    border: calc(var(--u) * .5) solid rgba(185,171,140,.18); box-shadow: inset 0 0 calc(var(--u) * 4) rgba(0,0,0,.6);
-  }
-  .door::before { top: 7%; height: 38%; }
-  .door::after { bottom: 7%; height: 38%; }
-  .door .studs { position: absolute; inset: 3% 5%; pointer-events: none;
-    background: radial-gradient(circle, #6b5f4a calc(var(--u) * .7), transparent calc(var(--u) * .8)) 0 0 / calc(var(--u) * 9) calc(var(--u) * 14) repeat-y; opacity: .55; }
-  .door.r .studs { background-position: right 0 top 0; }
-  /* 中央の閂と鍵穴 */
-  .bar { position: absolute; left: 22%; right: 22%; top: 50%; height: calc(var(--u) * 3.6); margin-top: calc(var(--u) * -1.8); z-index: 2;
-         background: linear-gradient(#5d5546, #3b352b); border-radius: calc(var(--u) * .6); box-shadow: 0 calc(var(--u) * .6) calc(var(--u) * 2) rgba(0,0,0,.7);
-         transition: transform .55s cubic-bezier(.5,-.4,.6,1.4), opacity .4s .4s; }
-  .plate { position: absolute; left: 50%; top: 50%; width: calc(var(--u) * 9); height: calc(var(--u) * 13); transform: translate(-50%, -50%); z-index: 3;
-           background: linear-gradient(#6f6452, #4a4236); border-radius: calc(var(--u) * 1.2); box-shadow: 0 calc(var(--u) * .8) calc(var(--u) * 2.4) rgba(0,0,0,.7);
-           transition: transform .5s cubic-bezier(.5,-.4,.6,1.4), opacity .4s .3s; }
-  .plate::after { content: ""; position: absolute; left: 50%; top: 34%; width: calc(var(--u) * 2.2); height: calc(var(--u) * 4.4); transform: translateX(-50%);
-                  background: #0b0806; border-radius: calc(var(--u) * 1.1) calc(var(--u) * 1.1) 2px 2px; }
-  /* 合わせ目から漏れる光 */
-  .seam { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; z-index: 1; opacity: 0;
-          background: #ffe9b8; box-shadow: 0 0 calc(var(--u) * 3) calc(var(--u) * 1) rgba(255,220,150,.55); transition: opacity .5s ease; }
-  #intro.unlock .bar { transform: translateY(calc(var(--u) * -14)) rotate(-4deg); opacity: 0; }
-  #intro.unlock .plate { transform: translate(-50%, -30%); opacity: 0; }
-  #intro.unlock .door.l { animation: rattle .35s ease; } #intro.unlock .door.r { animation: rattle .35s ease reverse; }
-  @keyframes rattle { 30% { transform: translateX(calc(var(--u) * -.4)); } 60% { transform: translateX(calc(var(--u) * .4)); } }
-  #intro.glow .seam { opacity: 1; }
-  #intro.open .door.l { transform: rotateY(100deg); }   /* 奥へ押し開ける */
-  #intro.open .door.r { transform: rotateY(-100deg); }
-  #intro.open .seam { opacity: 0; transition-duration: .3s; }
-  .hook { position: absolute; left: 6%; right: 6%; top: 18%; z-index: 4; text-align: center; font-weight: 900; font-size: calc(var(--u) * 6.4); line-height: 1.6; letter-spacing: .08em;
-          white-space: pre-line; opacity: 0; transform: translateY(calc(var(--u) * 2)); transition: opacity 1s ease, transform 1.2s ease;
-          text-shadow: 0 calc(var(--u) * .5) calc(var(--u) * 3) #000, 0 0 calc(var(--u) * 6) rgba(0,0,0,.9); }
-  .hook.on { opacity: 1; transform: none; }
-  #intro.open .hook { opacity: 0; transition-duration: .6s; }
+  /* ① 冒頭：封印された書庫の金庫扉（モーショングラフィックス）
+     すべての動きは Intro.update(t) が1コマごとに時間から計算する（録画しても音とずれない） */
+  #intro { opacity: 1; z-index: 8; background: transparent; }   /* 扉の左右それぞれが背景を持つので、開くと奥の地球儀が見える */
+  #intro.done { display: none; }
+  #vault, #dust { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #vault { overflow: visible; }
+  .hook { position: absolute; left: 5%; right: 5%; top: 7.5%; z-index: 4; text-align: center; font-weight: 900;
+          font-size: calc(var(--u) * 6.2); line-height: 1.65; letter-spacing: .1em; white-space: pre-line;
+          text-shadow: 0 0 calc(var(--u) * 4) rgba(0,0,0,.95); }
+  .hook .ch { display: inline-block; will-change: transform, opacity, filter; }
+  .hud { position: absolute; z-index: 4; font-family: "Special Elite", monospace; color: var(--accent); letter-spacing: .18em; font-size: calc(var(--u) * 2.5); line-height: 1.7; }
+  .hud.tl { left: 6%; top: 1.8%; opacity: .75; white-space: pre; font-size: calc(var(--u) * 2.3); }
+  .hud.st { left: 0; right: 0; top: 76%; text-align: center; font-size: calc(var(--u) * 2.9); }
+  .hud.st b { display: inline-block; width: calc(var(--u) * 2.2); height: calc(var(--u) * 3.2); margin: 0 calc(var(--u) * .5); vertical-align: -12%;
+              border: 1px solid var(--accent); transition: background .15s, box-shadow .15s; }
+  .hud.st b.on { background: var(--hot); border-color: var(--hot); box-shadow: 0 0 calc(var(--u) * 2) var(--hot); }
+  .hud.st .w { display: inline-block; min-width: 8em; text-align: left; margin-left: calc(var(--u) * 2); }
+  .hud.st.open .w { color: var(--hot); }
 
   /* ② 照準と地名 */
   .reticle { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 4; pointer-events: none; opacity: 0; transition: opacity .8s; }
@@ -197,8 +166,10 @@
   <div class="layer" id="question"><div class="qcard"><div class="lb">UNRESOLVED ── 未解決の問い</div><div class="q"></div><span class="stamp"></span><div class="no"></div></div></div>
   <div class="layer" id="outro"><div class="t">開かずの書庫</div><div class="r">AKAZU NO SHOKO</div><div class="c">続きは、プロフィールのリンクから</div></div>
   <div class="layer on" id="intro">
-    <div class="door l"><div class="studs"></div></div><div class="door r"><div class="studs"></div></div>
-    <div class="seam"></div><div class="bar"></div><div class="plate"></div>
+    <svg id="vault" viewBox="0 0 1000 1778" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+    <canvas id="dust"></canvas>
+    <div class="hud tl" id="hudTL"></div>
+    <div class="hud st" id="hudST"><span>SEAL</span><b></b><b></b><b></b><span class="w" id="hudW">LOCKED</span></div>
     <div class="hook" id="hook"></div>
   </div>
 </div>
@@ -431,6 +402,16 @@ const Sound = (() => {
   const SE = {
     latch(t) { thump(t, 90, .9, .35); noiseHit(t, "bandpass", 700, 1.2, .6, .18); noiseHit(t + .09, "bandpass", 1500, 3, .25, .08); },
     shimmer(t) { [2093, 2637, 3136].forEach((f, i) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = f; env(g, t + i * .06, .3, .022, 1.6); o.connect(g); out(g, .4, 1); o.start(t); o.stop(t + 2.3); }); },
+    tick(t) { noiseHit(t, "highpass", 3200, 1, .18, .025); thump(t, 900, .05, .03); },        // ダイヤルのカチッ
+    clunk(t) { thump(t, 120, .5, .18); noiseHit(t, "bandpass", 1100, 2, .3, .06); },         // ダイヤルがそろう
+    slide(t) {                                                                              // 重い扉が左右に開く
+      thump(t, 55, .9, 1.6);
+      const src = ctx.createBufferSource(); src.buffer = noise(1.8);
+      const f = ctx.createBiquadFilter(); f.type = "bandpass"; f.Q.value = .8;
+      f.frequency.setValueAtTime(180, t); f.frequency.exponentialRampToValueAtTime(1800, t + 1.2);
+      const g = ctx.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.45, t + .35); g.gain.exponentialRampToValueAtTime(.0001, t + 1.7);
+      src.connect(f); f.connect(g); out(g, 1, .8); src.start(t); src.stop(t + 1.8);
+    },
     creak(t) {                                    // 扉のきしみ＋開く風
       const o = ctx.createOscillator(); o.type = "sawtooth";
       for (let i = 0; i < 16; i++) o.frequency.setValueAtTime(58 + Math.random() * 55, t + i * .1);
@@ -454,7 +435,12 @@ const Sound = (() => {
     schedule(long) {
       if (!on || !ctx) return;
       const a = ctx.currentTime + .05;
-      const intro = () => { SE.latch(a + 1.6); SE.shimmer(a + 2.0); SE.creak(a + 2.2); SE.lock(a + 7.9); };
+      const intro = () => {
+        for (let k = .3; k < 1.55; k += .09 + Math.random() * .05) SE.tick(a + k);   // ダイヤルが回るカチカチ
+        [1.2, 1.4].forEach(sec => SE.clunk(a + sec));                                // 1つずつそろう
+        SE.latch(a + 1.6);                                                           // 3つ目でボルトが外れる
+        SE.shimmer(a + 2.0); SE.slide(a + 2.2); SE.lock(a + 7.9);
+      };
       const fade = end => { master.gain.setValueAtTime(.9, end - 2.5); master.gain.linearRampToValueAtTime(.0001, end); };
       if (!long) {                                   // 約25秒
         drone(a, 27);
@@ -485,13 +471,170 @@ const $ = id => document.getElementById(id);
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const ease3 = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
+/* ===== 冒頭：封印された書庫の金庫扉（モーショングラフィックス） =====
+   0.0〜1.0 方眼と金庫扉が線で描かれる／引きの一文が1文字ずつ浮かぶ
+   0.2〜1.6 3つのダイヤルが回って1つずつ止まり、赤い印が頂点にそろう（封印 ▮▮▮）
+   1.6      ボルトが引っ込み、中心の鍵が赤く光って回る（UNSEALED）
+   2.0      中央の切れ目に光
+   2.2〜3.5 扉が左右に割れて開き、カメラが寄る。埃が吹き飛び、文字が舞い上がる */
+const Intro = (() => {
+  const C = { x: 500, y: 850 }, PA = "#e9dcbc", GO = "#e0b25a", RD = "#ff5a4a";
+  const clamp = v => Math.max(0, Math.min(1, v));
+  const outC = t => 1 - Math.pow(1 - t, 3);
+  const inOut4 = t => t < .5 ? 8 * t ** 4 : 1 - Math.pow(-2 * t + 2, 4) / 2;
+  const backOut = t => { const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+  const pol = (r, deg) => { const a = deg * Math.PI / 180; return [C.x + r * Math.sin(a), C.y - r * Math.cos(a)]; };
+  const svg = document.getElementById("vault"), box = document.getElementById("intro");
+  let built = false, els = {}, chars = [], dust = [], raf = 0, t0 = 0, film = null;
+
+  function build(f) {
+    film = f;
+    // 目盛り（2°ごと、10°・30°で長く）と数字
+    let ticks = "", nums = "";
+    for (let a = 0; a < 360; a += 2) {
+      const L = a % 30 === 0 ? 30 : a % 10 === 0 ? 18 : 9, [x1, y1] = pol(392, a), [x2, y2] = pol(392 + L, a);
+      ticks += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${PA}" stroke-opacity="${a % 30 ? .45 : .95}" stroke-width="${a % 30 ? 1.2 : 2.6}"/>`;
+    }
+    for (let a = 0; a < 360; a += 30) { const [x, y] = pol(368, a);
+      nums += `<text x="${x}" y="${y + 7}" text-anchor="middle" font-size="19" fill="${PA}" fill-opacity=".55" font-family="Special Elite, monospace">${String(a).padStart(3, "0")}</text>`; }
+    // ボルト12本（位置は毎コマ計算）
+    let bolts = ""; for (let i = 0; i < 12; i++) bolts += `<g class="bolt"><circle r="17" fill="#0c1016" stroke="${PA}" stroke-width="2"/><circle r="6" fill="${PA}" fill-opacity=".8"/></g>`;
+    // 芯：六角形・スポーク・鍵穴
+    const hex = [0, 60, 120, 180, 240, 300].map(a => pol(165, a + 30).join(",")).join(" ");
+    let spokes = ""; for (let a = 0; a < 360; a += 60) { const [x1, y1] = pol(165, a), [x2, y2] = pol(238, a);
+      spokes += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${PA}" stroke-width="3" stroke-opacity=".8"/>`; }
+    const marker = (r, col) => { const [x, y] = pol(r, 0); return `<path d="M${x - 11},${y - 16} L${x + 11},${y - 16} L${x},${y + 4} Z" fill="${col}"/>`; };
+    const ringText = (`AKAZU NO SHOKO ・ SEALED ARCHIVE ・ FILE No.${f.no} ・ `).repeat(3);
+    const draw = (r, w, o) => `<circle class="draw" cx="${C.x}" cy="${C.y}" r="${r}" fill="none" stroke="${PA}" stroke-width="${w}" stroke-opacity="${o}" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1"/>`;
+    const art = `
+      <g id="vArt">
+        <path id="tRing" d="M ${C.x - 452},${C.y} a 452,452 0 1,1 904,0 a 452,452 0 1,1 -904,0" fill="none"/>
+        <g class="dialT"><text font-size="22" letter-spacing="7" fill="${GO}" fill-opacity=".8" font-family="Special Elite, monospace"><textPath href="#tRing">${ringText}</textPath></text></g>
+        ${draw(430, 3, .9)}${draw(345, 1.6, .55)}${draw(300, 1, .3)}${draw(250, 14, .55)}${draw(92, 2.5, .9)}
+        <g class="dialA">${ticks}${nums}${marker(388, RD)}</g>
+        <g class="dialB"><circle cx="${C.x}" cy="${C.y}" r="322" fill="none" stroke="${PA}" stroke-width="10" stroke-opacity=".35" stroke-dasharray="40 22"/>${marker(338, RD)}</g>
+        <g class="bolts">${bolts}</g>
+        <g class="dialC"><circle cx="${C.x}" cy="${C.y}" r="250" fill="none" stroke="${GO}" stroke-width="14" stroke-opacity=".5" stroke-dasharray="120 37"/>${marker(266, RD)}</g>
+        <g class="core">
+          <polygon points="${hex}" fill="none" stroke="${PA}" stroke-width="3" stroke-opacity=".85"/>${spokes}
+          <circle cx="${C.x}" cy="${C.y}" r="60" fill="#0c1016" stroke="${PA}" stroke-width="2"/>
+          <path class="key" d="M${C.x},${C.y - 26} a 13,13 0 1,1 -.1,0 Z M${C.x - 7},${C.y - 18} L${C.x + 7},${C.y - 18} L${C.x + 11},${C.y + 22} L${C.x - 11},${C.y + 22} Z" fill="${PA}"/>
+        </g>
+        ${marker(472, GO)}
+      </g>`;
+    const half = side => `
+      <g id="half${side}" clip-path="url(#clip${side})">
+        <rect width="1000" height="1778" fill="#07090c"/>
+        <rect class="grid" width="1000" height="1778" fill="url(#grid)" opacity="0"/>
+        <use href="#vArt"/>
+        <line x1="500" y1="0" x2="500" y2="1778" stroke="${GO}" stroke-width="3" class="edge" opacity="0" filter="url(#glow)"/>
+      </g>`;
+    svg.innerHTML = `
+      <defs>
+        <clipPath id="clipL"><rect x="0" y="0" width="500" height="1778"/></clipPath>
+        <clipPath id="clipR"><rect x="500" y="0" width="500" height="1778"/></clipPath>
+        <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M50 0 H0 V50" fill="none" stroke="${PA}" stroke-opacity=".09" stroke-width="1"/></pattern>
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <radialGradient id="flashG" cx="50%" cy="45%" r="60%"><stop offset="0" stop-color="#fff4d6" stop-opacity="1"/><stop offset=".35" stop-color="#ffd27a" stop-opacity=".45"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+        ${art}
+      </defs>
+      <g id="cam">${half("L")}${half("R")}</g>
+      <rect id="seam" x="497" y="0" width="6" height="1778" fill="#ffe9b8" filter="url(#glow)" opacity="0"/>
+      <rect id="flash" width="1000" height="1778" fill="url(#flashG)" opacity="0"/>`;
+    const q = sel => svg.querySelector(sel), qa = sel => [...svg.querySelectorAll(sel)];
+    els = { draws: qa("#vArt .draw"), A: q(".dialA"), B: q(".dialB"), Cc: q(".dialC"), T: q(".dialT"), bolts: qa(".bolt"), core: q(".core"), key: q(".key"),
+            L: q("#halfL"), R: q("#halfR"), cam: q("#cam"), grids: qa(".grid"), edges: qa(".edge"), seam: q("#seam"), flash: q("#flash"),
+            hudST: document.getElementById("hudST"), seals: [...document.querySelectorAll("#hudST b")], word: document.getElementById("hudW"),
+            hudTL: document.getElementById("hudTL") };
+    // 引きの一文を1文字ずつに分ける
+    const hook = document.getElementById("hook");
+    hook.innerHTML = [...f.hook].map(c => c === "\n" ? "<br>" : `<span class="ch">${c}</span>`).join("");
+    chars = [...hook.querySelectorAll(".ch")].map((el, i) => ({ el, i, dx: (Math.random() - .5) * 120, dy: -60 - Math.random() * 120, rot: (Math.random() - .5) * 40 }));
+    // 埃
+    dust = Array.from({ length: 140 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.8 + .4, vx: (Math.random() - .5) * .006, vy: -.004 - Math.random() * .01, a: Math.random() * .5 + .15 }));
+    built = true;
+  }
+
+  function hudText(t) {   // 左上：記録番号と座標をタイプ
+    const lines = [`ARCHIVE FILE No.${film.no} ／ ${t >= 1.65 ? "UNSEALED" : "SEALED"}`, film.sub.replace(/^.*／\s*/, "")];
+    const n = Math.floor(clamp((t - .3) / 1.1) * lines.join("").length);
+    let k = 0; return lines.map(l => { const part = l.slice(0, Math.max(0, n - k)); k += l.length; return part; }).join("\n");
+  }
+
+  function update(t, dt) {
+    const e = els;
+    // 方眼と線の描画
+    e.grids.forEach(g => g.setAttribute("opacity", (clamp(t / .7) * .9 * (1 - clamp((t - 2.6) / .6))).toFixed(3)));
+    e.draws.forEach((d, i) => d.setAttribute("stroke-dashoffset", (1 - outC(clamp((t - .05 - i * .1) / .85))).toFixed(4)));
+    // 3つのダイヤル：別々に回って、1.2／1.4／1.6秒で頂点にそろう
+    const dial = (start, dur, from) => from * (1 - backOut(clamp((t - start) / dur)));
+    const show = clamp((t - .15) / .45);
+    e.A.setAttribute("transform", `rotate(${dial(.2, 1.0, 250)} ${C.x} ${C.y})`); e.A.setAttribute("opacity", show);
+    e.B.setAttribute("transform", `rotate(${dial(.2, 1.2, -210)} ${C.x} ${C.y})`); e.B.setAttribute("opacity", show);
+    e.Cc.setAttribute("transform", `rotate(${dial(.2, 1.4, 330)} ${C.x} ${C.y})`); e.Cc.setAttribute("opacity", show);
+    e.T.setAttribute("transform", `rotate(${t * 14} ${C.x} ${C.y})`); e.T.setAttribute("opacity", clamp((t - .4) / .6));
+    // ボルトが引っ込む（1.6秒〜）
+    const br = 298 - 40 * outC(clamp((t - 1.6) / .3));
+    e.bolts.forEach((b, i) => { const [x, y] = pol(br, i * 30 + 15); b.setAttribute("transform", `translate(${x} ${y})`); b.setAttribute("opacity", show); });
+    // 中心の鍵が回り、赤く光る
+    e.core.setAttribute("transform", `rotate(${90 * backOut(clamp((t - 1.62) / .45))} ${C.x} ${C.y})`); e.core.setAttribute("opacity", show);
+    e.key.setAttribute("fill", t >= 1.6 ? RD : PA); e.key.setAttribute("filter", t >= 1.6 ? "url(#glow)" : "");
+    // 封印の表示
+    [1.2, 1.4, 1.6].forEach((s2, i) => e.seals[i].classList.toggle("on", t >= s2));
+    e.word.textContent = t >= 1.65 ? "UNSEALED" : "LOCKED"; e.hudST.classList.toggle("open", t >= 1.65);
+    e.hudST.style.opacity = (clamp((t - .5) / .4) * (1 - clamp((t - 2.15) / .35))).toFixed(3);
+    e.hudTL.textContent = hudText(t); e.hudTL.style.opacity = (1 - clamp((t - 2.15) / .35)) * .8;
+    // 切れ目の光 → 扉が左右に割れて開く・カメラが寄る
+    e.seam.setAttribute("opacity", (clamp((t - 1.95) / .25) * (1 - clamp((t - 2.6) / .5))).toFixed(3));
+    e.edges.forEach(g => g.setAttribute("opacity", (clamp((t - 2.05) / .2) * (1 - clamp((t - 3.2) / .4))).toFixed(3)));
+    const op = inOut4(clamp((t - 2.2) / 1.3));
+    e.L.setAttribute("transform", `translate(${-680 * op} 0)`); e.R.setAttribute("transform", `translate(${680 * op} 0)`);
+    const z = 1 + .16 * outC(clamp((t - 1.7) / 2.2));
+    e.cam.setAttribute("transform", `translate(${C.x} ${C.y}) scale(${z}) translate(${-C.x} ${-C.y})`);
+    e.flash.setAttribute("opacity", (t < 2.2 ? 0 : Math.max(0, .75 * (1 - (t - 2.2) / .9))).toFixed(3));
+    // 引きの一文：ぼかしから1文字ずつ → 開くと舞い上がって消える
+    chars.forEach(c => {
+      const a = outC(clamp((t - .25 - c.i * .035) / .55)), ex = clamp((t - 2.15 - c.i * .012) / .8), ee = outC(ex);
+      c.el.style.opacity = (a * (1 - ex)).toFixed(3);
+      c.el.style.filter = `blur(${((1 - a) * 10 + ex * 6).toFixed(1)}px)`;
+      c.el.style.transform = `translate(${(c.dx * ee).toFixed(1)}px, ${((1 - a) * 14 + c.dy * ee).toFixed(1)}px) rotate(${(c.rot * ee).toFixed(1)}deg)`;
+    });
+    // 埃：ふだんはゆっくり漂い、扉が開くと中心から外へ吹き飛ぶ
+    const cv = document.getElementById("dust"), ctx = cv.getContext("2d");
+    const dpr = devicePixelRatio || 1, W = Math.round(cv.clientWidth * dpr), H = Math.round(cv.clientHeight * dpr);
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }   // 大きさが変わった時だけ作り直す
+    ctx.clearRect(0, 0, W, H);
+    const burst = clamp((t - 2.2) / .2), fadeAll = 1 - clamp((t - 3.1) / .5);
+    dust.forEach(d => {
+      if (burst > 0) { const dx = d.x - .5, dy = d.y - .45, l = Math.hypot(dx, dy) || 1; d.vx += dx / l * .02 * burst * dt * 60; d.vy += dy / l * .02 * burst * dt * 60; }
+      d.x += d.vx * dt; d.y += d.vy * dt; if (d.y < -.02) d.y = 1.02;
+      ctx.globalAlpha = d.a * clamp(t / .8) * fadeAll; ctx.fillStyle = "#ffe2a6";
+      ctx.beginPath(); ctx.arc(d.x * W, d.y * H, d.r * (devicePixelRatio || 1), 0, 7); ctx.fill();
+    });
+  }
+
+  return {
+    prepare(f) { build(f); box.classList.remove("done"); update(0, 0); },
+    seek(t) { update(t, 1 / 60); },   // 確認用：任意の瞬間を描く
+    start(startAt) {
+      t0 = startAt; let last = 0;
+      const tick = now => {
+        const t = (now - t0) / 1000, dt = Math.min(.05, Math.max(0, t - last)); last = t;
+        update(t, dt);
+        if (t < 3.8) raf = requestAnimationFrame(tick); else box.classList.add("done");
+      };
+      raf = requestAnimationFrame(tick);
+    },
+  };
+})();
+
 async function play() {
   await dataReady; if (!ready) await new Promise(r => map.once("load", r));
   const f = film;
   // 準備：地球は現場の裏側を向けておく
   spinOn = false; map.stop();
   map.jumpTo({ center: [f.lng + 140, 15], zoom: homeZoom(), pitch: 0, bearing: 0 });
-  $("hook").textContent = f.hook;
+  Intro.prepare(f);
   $("place").querySelector(".p").textContent = f.place;
   $("place").querySelector(".s").textContent = f.sub;
   $("facts").innerHTML = f.facts.map(([k, v]) => `<div class="fact"><small>${k}</small>${v}</div>`).join("");
@@ -512,14 +655,9 @@ async function play() {
   Sound.schedule(!!L);   // 音は映像と同じ開始時刻から、台本の秒数どおりに鳴る
   const t0 = performance.now(); const at = ms => wait(Math.max(0, ms - (performance.now() - t0)));
 
-  // 0.0s 閉ざされた扉に、引きの一文
-  await at(300);  $("hook").classList.add("on");
-  // 1.6s 閂が外れる → 2.0s 合わせ目から光 → 2.2s 扉が奥へ開き、向こうで地球儀が回る
-  await at(1600); $("intro").classList.add("unlock");
-  await at(2000); $("intro").classList.add("glow");
-  await at(2200); $("intro").classList.add("open");
+  // 0〜3.8s 冒頭：封印された金庫扉（Intro が1コマごとに描く）
+  Intro.start(t0);
   await at(2400); map.easeTo({ center: [f.lng, f.lat], zoom: homeZoom(), duration: 2400, easing: t => 1 - Math.pow(1 - t, 3) });
-  await at(3700); $("intro").classList.add("off");   // 開ききった扉を消す
   // 4.8s 現場へ降りる
   await at(4800); map.easeTo({ center: [f.lng, f.lat], zoom: f.zoom - .5, pitch: f.pitch, bearing: f.bearing, duration: 3300, easing: ease3 });
   // 7.6s 照準と地名
