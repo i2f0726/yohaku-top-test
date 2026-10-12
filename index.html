@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow"><!-- テストページ：検索エンジンに登録しない -->
 <title>余白工房 ｜ 事件ファイル</title>
+<script>
+/* 確認用：URLに ?debug を付けると、画面の隅に地図の状態とエラーを表示（スマホで原因を調べるため） */
+window.DEBUG = /[?&]debug/.test(location.search);
+window.dbgLog = [];
+window.dbg = function (m) { dbgLog.push(new Date().toTimeString().slice(0, 8) + " " + m); if (dbgLog.length > 12) dbgLog.shift(); };
+addEventListener("error", function (e) { dbg("ERR " + String(e.message).slice(0, 140) + (e.filename ? " @" + e.filename.split("/").pop() + ":" + e.lineno : "")); });
+addEventListener("unhandledrejection", function (e) { dbg("REJ " + String(e.reason && (e.reason.message || e.reason)).slice(0, 140)); });
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600;900&family=Special+Elite&display=swap" rel="stylesheet">
@@ -517,6 +525,8 @@ const map = new maplibregl.Map({
   center: [20, 20],
   zoom: homeZoom(),
   attributionControl: { compact: true },
+  pixelRatio: Math.min(devicePixelRatio || 1, 2), // 高精細スマホでの描画メモリを抑える
+  maxTileCacheSize: touchUI() ? 40 : null,
   maxPitch: 70,
   style: lineStyle()
 });
@@ -655,14 +665,50 @@ setInterval(() => {
   lastLng = lng;
   if (!map.isMoving() || stuck >= 2) { dragging = false; try { map.stop(); } catch (e) {} spin(); }
 }, 1500);
-addEventListener("error", e => {
-  const msg = String(e.message || "");
-  if (msg.includes("Attempting to run(), but is already running")) {
-    try { if (map._renderTaskQueue) map._renderTaskQueue._currentlyRunning = false; map.triggerRepaint(); } catch (err) {}
-  } else if (/maplibre/.test(e.filename || "")) {
-    console.warn("地図の描画で例外（固まる原因の候補）:", e.error || msg);
+// MapLibre の描画処理は、途中で例外が起きると「実行中」の印が残ったまま固まる。
+// この見張りが動く瞬間に描画中であることはあり得ないので、印が残っていれば固まっている → 外して描画を再開
+setInterval(() => {
+  const q = map._renderTaskQueue;
+  if (q && q._currentlyRunning) {
+    q._currentlyRunning = false;
+    dbg("描画の固まりを解除");
+    try { map.triggerRepaint(); } catch (e) {}
   }
+}, 1000);
+addEventListener("error", e => {
+  if (/maplibre/.test(e.filename || "")) console.warn("地図の描画で例外:", e.error || e.message);
 });
+
+/* ④ スマホの描画機能（WebGL）がメモリ不足で強制終了された時：復活しなければページを読み込み直す（1分に1回まで） */
+let ctxLost = false;
+map.on("webglcontextlost", () => {
+  ctxLost = true; dbg("WebGL 強制終了");
+  setTimeout(() => {
+    if (!ctxLost) return;
+    let last = 0; try { last = +sessionStorage.getItem("reloadAt") || 0; } catch (e) {}
+    if (Date.now() - last < 60000) { dbg("再読み込みは見送り（1分以内）"); return; }
+    try { sessionStorage.setItem("reloadAt", Date.now()); } catch (e) {}
+    location.reload();
+  }, 2500);
+});
+map.on("webglcontextrestored", () => { ctxLost = false; dbg("WebGL 復活"); map.triggerRepaint(); });
+
+/* 確認用の表示 */
+if (window.DEBUG) {
+  const box = document.createElement("pre");
+  box.style.cssText = "position:fixed;left:6px;top:6px;z-index:99;max-width:94vw;margin:0;padding:6px 8px;" +
+    "background:rgba(0,0,0,.78);color:#9f9;font:10px/1.4 monospace;white-space:pre-wrap;pointer-events:none;border:1px solid #3a3";
+  document.body.appendChild(box);
+  setInterval(() => {
+    const c = map.getCenter(), q = map._renderTaskQueue;
+    box.textContent = [
+      `dpr ${devicePixelRatio} → ${(map.getCanvas().width / map.getCanvas().clientWidth).toFixed(2)}  touch:${touchUI()}  ctxLost:${ctxLost}`,
+      `z ${map.getZoom().toFixed(2)}  c ${c.lng.toFixed(1)},${c.lat.toFixed(1)}  moving:${map.isMoving()}`,
+      `current:${current}  spinning:${spinning}  hold:${userHold}  drag:${dragging}  stuck:${!!(q && q._currentlyRunning)}`,
+      ...dbgLog
+    ].join("\n");
+  }, 500);
+}
 
 /* --- レーダー＆照準（ピンより先に追加して下に敷く） --- */
 const reticleEl = document.createElement("div");
@@ -799,6 +845,8 @@ map.on("load", () => {
   map.addLayer({ id: "area-fill", type: "fill", source: "area", paint: { "fill-color": "#ff5a4a", "fill-opacity": 0.08 } });
   map.addLayer({ id: "area-line", type: "line", source: "area",
     paint: { "line-color": "#ff5a4a", "line-width": 1.6, "line-dasharray": [3, 2], "line-opacity": 0.9 } });
+  // スマホは建物の輪郭と細い等高線を省いて、描画メモリを節約
+  if (touchUI()) ["buildings", "contour-minor"].forEach(id => map.setLayoutProperty(id, "visibility", "none"));
   spin();
 });
 
