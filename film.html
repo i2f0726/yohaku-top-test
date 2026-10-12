@@ -185,6 +185,7 @@
     <p>縦長 9:16・約25秒。<br>先に画面録画を始めてから「撮影開始」を押してください。<br>この案内は撮影中は表示されません。</p>
     <select id="pick"></select>
     <select id="len"><option value="25">約25秒（ショート）</option><option value="60">約60秒（長め）※台本がある記事のみ</option></select>
+    <select id="bgm"><option value="pulse">BGM：鼓動（ドキュメンタリー風）</option><option value="box">BGM：オルゴール（不気味）</option><option value="quiet">BGM：静寂（これまで）</option></select>
     <label class="snd"><input type="checkbox" id="snd" checked> 音あり（効果音・BGM）</label>
     <button id="go" type="button">撮影開始</button>
   </div>
@@ -260,6 +261,7 @@ const LINE = "#e9dcbc", BLUE = "#8fb3d9", empty = { type: "FeatureCollection", f
 const fade = (a, b, x, y) => ["interpolate", ["linear"], ["zoom"], a, x, b, y];
 const params = new URLSearchParams(location.search);
 let lenSel = params.get("len") === "60" ? "60" : "25";
+let bgmSel = ["pulse", "box", "quiet"].includes(params.get("bgm")) ? params.get("bgm") : "pulse";
 let film = FILMS[params.get("id")] || FILMS.oak;
 const homeZoom = () => Math.log2(document.getElementById("stage").clientWidth * .82 * Math.PI / 512);
 
@@ -310,6 +312,8 @@ pick.innerHTML = Object.entries(FILMS).map(([k, f]) => `<option value="${k}">FIL
 pick.value = Object.keys(FILMS).find(k => FILMS[k] === film);
 pick.addEventListener("change", () => { film = FILMS[pick.value]; history.replaceState(null, "", "?id=" + pick.value); });
 document.getElementById("len").value = lenSel;
+document.getElementById("bgm").value = bgmSel;
+document.getElementById("bgm").addEventListener("change", e => { bgmSel = e.target.value; });
 document.getElementById("len").addEventListener("change", e => { lenSel = e.target.value; });
 document.getElementById("go").addEventListener("click", () => {
   Sound.setOn(document.getElementById("snd").checked);
@@ -406,6 +410,31 @@ const Sound = (() => {
     const g2 = ctx.createGain(); g2.gain.value = .15; o2.connect(g2); g2.connect(g);
     out(g, .6, 1); o.start(t); o2.start(t); o.stop(t + 2.6); o2.stop(t + 2.6);
   }
+  /* 鼓動：低い2連打（ドクン、ドクン） */
+  function heart(t, v) { thump(t, 62, .55 * v, .26); thump(t + .19, 54, .38 * v, .22); }
+  /* 秒針のような刻み */
+  function tickTock(t, v) { noiseHit(t, "highpass", 6500, 1, v, .02); }
+  /* 不穏な弦（のこぎり波を重ね、こもらせてゆっくり立ち上げる） */
+  function strings(t, notes, dur, vol) {
+    const g = ctx.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 2.6);
+    g.gain.setValueAtTime(vol, t + dur - 2); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.Q.value = 1.2;
+    lp.frequency.setValueAtTime(380, t); lp.frequency.linearRampToValueAtTime(900, t + dur * .6); lp.frequency.linearRampToValueAtTime(500, t + dur);
+    const vib = ctx.createOscillator(), vg = ctx.createGain(); vib.frequency.value = 5.2; vg.gain.value = 6; vib.connect(vg);   // 弦のビブラート
+    notes.forEach(m => [-9, 0, 9].forEach(c => { const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = midi(m); o.detune.value = c; vg.connect(o.detune); o.connect(lp); o.start(t); o.stop(t + dur + .1); }));
+    lp.connect(g); out(g, .6, 1); vib.start(t); vib.stop(t + dur + .1);
+  }
+  /* オルゴール（基音＋少しずれた倍音、速い減衰） */
+  function musicBox(t, m, vol) {
+    const g = ctx.createGain(); env(g, t, .003, vol, 1.8);
+    [[1, 1], [2.01, .35], [3.03, .18], [4.2, .08]].forEach(([r, v]) => {
+      const o = ctx.createOscillator(), og = ctx.createGain(); o.frequency.value = midi(m) * r; o.detune.value = (Math.random() - .5) * 14;
+      og.gain.value = v; o.connect(og); og.connect(g); o.start(t); o.stop(t + 2);
+    });
+    out(g, .55, 1.1);
+  }
+  function fadeOut(end) { master.gain.setValueAtTime(.9, end - 2.5); master.gain.linearRampToValueAtTime(.0001, end); }
+
   /* 効果音 */
   const SE = {
     latch(t) { thump(t, 90, .9, .35); noiseHit(t, "bandpass", 700, 1.2, .6, .18); noiseHit(t + .09, "bandpass", 1500, 3, .25, .08); },
@@ -455,39 +484,63 @@ const Sound = (() => {
     setOn(v) { on = v; },
     prime,
     /* 本編の開始時に呼ぶ。台本の秒数どおりに BGM と効果音を予約する */
-    schedule(long) {
+    /* style：BGM の種類（pulse＝鼓動／box＝オルゴール／quiet＝静寂） */
+    schedule(long, style = "pulse") {
       if (!on || !ctx) return;
       const a = ctx.currentTime + .05, b = a + HOLD;   // a：冒頭（〜2秒）の基準、b：扉が開いて以降の基準
-      const intro = () => {
-        for (let k = .3; k < 1.55; k += .09 + Math.random() * .05) SE.tick(a + k);   // ダイヤルが回るカチカチ
-        [1.2, 1.4, 1.6].forEach(sec => SE.clunk(a + sec));                           // ダイヤルが1つずつそろう
-        [1.42, 1.62, 1.82].forEach(sec => SE.seat(a + sec));                         // 珠が受け口にはまる
-        SE.latch(a + 1.85);                                                          // 3つそろって封印が解け、ボルトが外れる
-        SE.rise(a + 1.9, HOLD + .3);                                                 // 溜め：低い音が高まっていく
-        SE.shimmer(b + 2.0); SE.slide(b + 2.2); SE.lock(b + 7.9);
-      };
-      const fade = end => { master.gain.setValueAtTime(.9, end - 2.5); master.gain.linearRampToValueAtTime(.0001, end); };
-      if (!long) {                                   // 約25秒
-        drone(a, 27 + HOLD);
-        pad(b + 2.2, [57, 60, 64], 7.4, .055); pad(b + 9.2, [53, 57, 60], 6.0, .05);
-        pad(b + 14.8, [52, 55, 59], 5.6, .05); pad(b + 20.0, [57, 60, 64], 6.5, .045);
-        [[8.2, 76], [9.4, 72], [11.0, 74], [12.6, 71], [14.2, 72], [16.0, 69], [17.6, 67], [19.2, 64], [21.0, 69]].forEach(([sec, m]) => pluck(b + sec, m, .08));
-        intro(); [9.0, 12.5, 16.0].forEach(sec => SE.paper(b + sec));             // 札が入る
-        [12.0, 15.5, 19.3].forEach(sec => SE.swish(b + sec));                        // 札が去る
-        SE.stamp(b + 20.75); SE.boom(b + 23.5); fade(b + 27);
-        return;
+      const len = long ? 61 : 27;                      // 扉が開いてからの長さ（秒、b 基準）
+      const Q = long ? 50.5 : 20.0;                    // 「未解決の問い」が出る時刻（b 基準）
+
+      /* --- 効果音（BGM の種類に関係なく共通） --- */
+      for (let k = .3; k < 1.55; k += .09 + Math.random() * .05) SE.tick(a + k);   // ダイヤルが回るカチカチ
+      [1.2, 1.4, 1.6].forEach(sec => SE.clunk(a + sec));                           // ダイヤルが1つずつそろう
+      [1.42, 1.62, 1.82].forEach(sec => SE.seat(a + sec));                         // 珠が受け口にはまる
+      SE.latch(a + 1.85);                                                          // 封印が解け、ボルトが外れる
+      SE.rise(a + 1.9, HOLD + .3);                                                 // 溜め
+      SE.shimmer(b + 2.0); SE.slide(b + 2.2); SE.lock(b + 7.9);
+      if (!long) {
+        [9.0, 12.5, 16.0].forEach(sec => SE.paper(b + sec));                       // 札が入る
+        [12.0, 15.5, 19.3].forEach(sec => SE.swish(b + sec));                      // 札が去る
+        SE.stamp(b + 20.75); SE.boom(b + 23.5);
+      } else {
+        [9.2, 11.6, 14.0, 16.4, 18.8, 21.2].forEach(sec => SE.paper(b + sec));   // 年表
+        SE.paper(b + 24.6);                                                        // 写真
+        [32.0, 36.6, 41.2].forEach(sec => { SE.paper(b + sec); SE.stamp(b + sec + .55); });  // 3つの説と判子
+        SE.shimmer(b + 45.0);                                                      // ひとこと
+        SE.stamp(b + 51.25); SE.boom(b + 56.5);
       }
-      drone(a, 61.5 + HOLD);                          // 約60秒
-      [[2.2, [57, 60, 64]], [9.2, [53, 57, 60]], [16.2, [52, 55, 59]], [23.2, [57, 60, 64]], [30.2, [50, 53, 57]],
-       [37.2, [53, 57, 60]], [44.2, [52, 55, 59]], [51.2, [57, 60, 64]]].forEach(([sec, n]) => pad(b + sec, n, 7.6, .05));
-      const mel = [76, 72, 74, 71, 72, 69, 67, 64, 69, 71, 72, 74, 76, 72, 69, 67, 64, 62, 64, 69];
-      mel.forEach((m, i) => pluck(b + 8.2 + i * 2.1, m, .07));
-      intro();
-      [9.2, 11.6, 14.0, 16.4, 18.8, 21.2].forEach(sec => SE.paper(b + sec));     // 年表
-      SE.paper(b + 24.6);                                                          // 写真
-      [32.0, 36.6, 41.2].forEach(sec => { SE.paper(b + sec); SE.stamp(b + sec + .55); });  // 3つの説と判子
-      SE.shimmer(b + 45.0);                                                        // ひとこと
-      SE.stamp(b + 51.25); SE.boom(b + 56.5); fade(b + 61);
+
+      /* --- BGM --- */
+      if (style === "quiet") {                         // 静寂：低いうなり・暗い和音・まばらな単音（これまでの BGM）
+        drone(a, len + .5 + HOLD);
+        const chords = [[57, 60, 64], [53, 57, 60], [52, 55, 59], [57, 60, 64], [50, 53, 57], [53, 57, 60], [52, 55, 59], [57, 60, 64]];
+        for (let i = 0, t = 2.2; t < len - 2; i++, t += 7) pad(b + t, chords[i % chords.length], 7.6, .05);
+        const mel = [76, 72, 74, 71, 72, 69, 67, 64, 69, 71, 72, 74, 76, 72, 69, 67, 64, 62, 64, 69];
+        for (let i = 0, t = 8.2; t < len - 4; i++, t += 2.1) pluck(b + t, mel[i % mel.length], .07);
+      } else if (style === "box") {                    // オルゴール：少し調子の外れた3拍子の短調の旋律
+        drone(a, len + .5 + HOLD);
+        const tune = [69, 72, 76, 75, 76, 72, 69, 71, 72, 71, 69, 68, 69, 64, 69, 72, 71, 69, 68, 69, 71, 64, 65, 64];
+        const beat = .46;
+        for (let i = 0, t = 2.6; t < len - 3; i++, t += beat * (i % 3 === 0 ? 1.12 : 1)) {   // 小節の頭を少し溜める
+          musicBox(b + t + (Math.random() - .5) * .025, tune[i % tune.length], i % 3 === 0 ? .11 : .075);
+          if (i % 6 === 0) musicBox(b + t, tune[i % tune.length] - 24, .06);              // 低音
+        }
+        for (let t = 2.4; t < len - 2; t += 9) pad(b + t, [45, 52, 57], 9.4, .03);
+      } else {                                         // 鼓動：ドキュメンタリー風の緊張感
+        const bpm = 66, B = 60 / bpm;
+        // 不穏な弦（半音でぶつかる和音が、ゆっくり入れ替わる）
+        const cl = [[45, 46, 52], [43, 44, 50], [41, 42, 48], [45, 46, 53]];
+        for (let i = 0, t = 1.9; t < len - 1; i++, t += 7) strings(b + t, cl[i % cl.length], 7.8, .045 + Math.min(.03, t / len * .03));
+        // 心臓の鼓動（2連打）と秒針の刻み。問いの直前でふっと止まる
+        for (let t = 2.2; t < Q - .4; t += B) {
+          const swell = .45 + .45 * Math.min(1, t / (Q - 2));      // 問いに向かって少しずつ強く
+          heart(b + t, swell);
+          tickTock(b + t + B / 2, .035);
+        }
+        // 問いのあとは、低いうなりだけを残す
+        drone(b + Q - .2, len - Q + .6);
+      }
+      fadeOut(b + len);
     },
   };
 })();
@@ -710,7 +763,7 @@ async function play() {
       `<div class="hy"><h3>${h}</h3><p style="white-space:pre-line">${d}</p><span class="lv ${c}">${lv}</span></div>`).join(""));
     $("musing").querySelector("p").textContent = L.musing;
   }
-  Sound.schedule(!!L);   // 音は映像と同じ開始時刻から、台本の秒数どおりに鳴る
+  Sound.schedule(!!L, bgmSel);   // 音は映像と同じ開始時刻から、台本の秒数どおりに鳴る
   const t0 = performance.now();
   const at = ms => wait(Math.max(0, ms + (ms >= 2000 ? HOLD * 1000 : 0) - (performance.now() - t0)));   // 扉が開いて以降は溜めの分ずらす
 
