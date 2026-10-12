@@ -185,6 +185,16 @@ addEventListener("unhandledrejection", function (e) { dbg("REJ " + String(e.reas
     transform: rotate(-9deg); opacity: .8; border-radius: 2px;
     mix-blend-mode: multiply;
   }
+  /* 閲覧注意の判子：黒い二重枠。重い内容の記事にだけ押す */
+  .caution {
+    display: inline-block; font-weight: 900; font-size: 9.5px; letter-spacing: .14em; line-height: 1.5;
+    color: #1d1a16; padding: 0 5px; border-radius: 2px;
+    border: 1.5px solid #1d1a16; outline: 1px solid #1d1a16; outline-offset: 1.5px;
+    mix-blend-mode: multiply; opacity: .78;
+  }
+  .file .caution { position: absolute; right: 12px; bottom: 9px; transform: rotate(5deg); }
+  .file.has-caution .meta { padding-right: 5.6em; }
+  .detail h3 .caution { margin-left: 10px; vertical-align: 3px; transform: rotate(-4deg); }
   #files:hover .file:not(:hover) { opacity: .5; }
   .file:hover, .file.active, .file:focus-visible { transform: translateX(-10px); }
   .file:hover .sheet, .file.active .sheet, .file:focus-visible .sheet {
@@ -368,7 +378,7 @@ const FILES = [
     occurred: "1918年〜", site: "北大西洋", place: "バミューダ・トライアングル",
     lng: -71.5, lat: 25.6, zoom: 3.8, pitch: 25, bearing: 0, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/29/074344",
     area: [[-80.19, 25.76], [-64.78, 32.30], [-66.10, 18.47], [-80.19, 25.76]] },
-  { id: "isdal", genre: "jiken", region: "world", title: "イスダールの女", date: "2026.09.28", stamp: "身元不明",
+  { id: "isdal", caution: true, genre: "jiken", region: "world", title: "イスダールの女", date: "2026.09.28", stamp: "身元不明",
     occurred: "1970年 11月", site: "ノルウェー・ベルゲン近郊", place: "イスダレン渓谷",
     lng: 5.3889, lat: 60.4146, zoom: 13.2, pitch: 60, bearing: 40, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/28/074104" },
   { id: "tut", genre: "kaidan", region: "world", title: "ツタンカーメンの呪い", date: "2026.09.27", stamp: "伝説化",
@@ -405,7 +415,7 @@ const FILES = [
   { id: "woolpit", genre: "jiken", region: "world", title: "ウールピットの緑の子どもたち", date: "2026.09.18", stamp: "真相不明",
     occurred: "12世紀半ば", site: "イングランド・サフォーク州", place: "ウールピット村",
     lng: 0.8890, lat: 52.2246, zoom: 14.5, pitch: 50, bearing: 0, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/18/074356" },
-  { id: "somerton", genre: "jiken", region: "world", title: "サマートン男事件", date: "2026.09.17", stamp: "未解決",
+  { id: "somerton", caution: true, genre: "jiken", region: "world", title: "サマートン男事件", date: "2026.09.17", stamp: "未解決",
     occurred: "1948年 12月", site: "オーストラリア・アデレード近郊", place: "サマートン・ビーチ",
     lng: 138.5110, lat: -34.9985, zoom: 15, pitch: 55, bearing: -60, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/17/074500" },
   { id: "laughter", genre: "jiken", region: "world", title: "タンガニーカ笑い病", date: "2026.09.16", stamp: "原因不明",
@@ -417,10 +427,10 @@ const FILES = [
   { id: "celeste", genre: "jiken", region: "world", title: "メアリー・セレスト号事件", date: "2026.09.14", stamp: "行方不明",
     occurred: "1872年 12月", site: "大西洋 アゾレス諸島の沖", place: "発見された海域",
     lng: -17.2500, lat: 38.3300, zoom: 5.5, pitch: 30, bearing: 0, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/14/074130" },
-  { id: "dyatlov", genre: "jiken", region: "world", title: "ディアトロフ峠事件", date: "2026.09.13", stamp: "未解決",
+  { id: "dyatlov", caution: true, genre: "jiken", region: "world", title: "ディアトロフ峠事件", date: "2026.09.13", stamp: "未解決",
     occurred: "1959年 2月", site: "ロシア・ウラル山脈北部", place: "ディアトロフ峠",
     lng: 59.4622, lat: 61.7544, zoom: 12.5, pitch: 60, bearing: 30, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/13/084926" },
-  { id: "gevaudan", genre: "jiken", region: "world", title: "ジェヴォーダンの獣", date: "2026.09.12", stamp: "正体不明",
+  { id: "gevaudan", caution: true, genre: "jiken", region: "world", title: "ジェヴォーダンの獣", date: "2026.09.12", stamp: "正体不明",
     occurred: "1764年〜1767年", site: "フランス南部", place: "ジェヴォーダン地方",
     lng: 3.4000, lat: 44.7000, zoom: 9, pitch: 50, bearing: 0, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/12/160254" },
   { id: "senrigan", genre: "jiken", region: "jp", title: "千里眼事件", date: "2026.09.11", stamp: "決着せず",
@@ -442,7 +452,7 @@ const FILES = [
 /* カテゴリー：色＝ジャンル、国内／海外＝ピンの形（WordPress移行後はカテゴリー／タグから） */
 const CATS = [
   { key: "jiken",  label: "事件ファイル", name: "事件",     hot: "#ff5a4a" },
-  { key: "kaidan", label: "怪談ファイル", name: "怪談",     hot: "#b48cff" },
+  { key: "kaidan", label: "禁書の棚", name: "禁書の棚", hot: "#b48cff" }, // 怪談ファイル
   { key: "toshi",  label: "都市伝説ファイル", name: "都市伝説", hot: "#4fe08a" },
 ];
 const catOf = f => CATS.find(c => c.key === f.genre) || CATS[0];
@@ -771,7 +781,7 @@ function renderDetail(f) {
   const open = `<a class="open" href="${f.url}" target="_blank" rel="noopener">ファイルを開く →</a>`;
   return `<div class="card">
       <div class="hd"><span>調書 No.${fileNo(f)} ／ ${catOf(f).label}｜${regionName(f)}</span><button type="button" class="close" title="地球儀へ戻る（Esc）"><span class="long">ファイルを</span>閉じる ×</button></div>
-      <h3>${f.title}</h3>
+      <h3>${f.title}${f.caution ? '<span class="caution">閲覧注意</span>' : ""}</h3>
       <dl><dt>発生</dt><dd>${f.occurred}</dd><dt>現場</dt><dd>${f.site}</dd><dt>状況</dt><dd class="st">${f.stamp}</dd></dl>
       <p>${sum}</p><div class="q">${q}</div>${open}</div>`;
 }
@@ -890,14 +900,14 @@ $("legend").addEventListener("click", e => {
 });
 FILES.forEach((f, i) => {
   const a = document.createElement("a");
-  a.className = "file cat-" + catOf(f).key; a.href = f.url; a.target = "_blank"; a.rel = "noopener"; a.dataset.id = f.id;
+  a.className = "file cat-" + catOf(f).key + (f.caution ? " has-caution" : ""); a.href = f.url; a.target = "_blank"; a.rel = "noopener"; a.dataset.id = f.id;
   a.innerHTML = `
     <span class="tab">${catOf(f).label}｜${regionName(f)}</span>
     <div class="sheet">
       <div class="no">FILE No.${String(FILES.length - i).padStart(3, "0")} ／ ${f.date}</div>
       <h2>${f.title}</h2>
       <div class="meta">${f.occurred} ／ ${f.site}</div>
-      <span class="stamp">${f.stamp}</span>
+      <span class="stamp">${f.stamp}</span>${f.caution ? '<span class="caution">閲覧注意</span>' : ""}
     </div>`;
   a.addEventListener("focus", () => { if (!touchUI()) queueFocus(f.id); }); // キーボード操作用
   filesEl.appendChild(a);
