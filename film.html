@@ -68,12 +68,17 @@
   #place .s { margin-top: calc(var(--u) * 2); font-family: "Special Elite", monospace; font-size: calc(var(--u) * 3); color: var(--accent); letter-spacing: .15em; }
 
   /* ③ 事実（ファイルのラベル風）。TikTok等のボタンと重ならないよう、下20%・右15%を避ける */
-  #facts { top: auto; bottom: 22%; left: 7%; right: 16%; height: auto; display: flex; flex-direction: column; gap: calc(var(--u) * 2.6); opacity: 1; }
-  .fact { background: var(--paper); color: var(--paper-ink); padding: calc(var(--u) * 2.6) calc(var(--u) * 3.6);
+  /* 事実の札：同じ場所に1枚ずつ。左から滑り込み → 右へ滑り去り → 次の札が入る */
+  #facts { top: auto; bottom: 22%; left: 7%; right: 16%; height: calc(var(--u) * 22); opacity: 1; overflow: visible; }
+  .fact { position: absolute; left: 0; right: 0; bottom: 0;
+          background: var(--paper); color: var(--paper-ink); padding: calc(var(--u) * 2.6) calc(var(--u) * 3.6);
           font-size: calc(var(--u) * 4.4); font-weight: 900; line-height: 1.5; letter-spacing: .04em;
           box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 6) rgba(0,0,0,.6), calc(var(--u) * -.9) 0 0 var(--red);
-          opacity: 0; transform: translateX(calc(var(--u) * -8)) rotate(-1.5deg); transition: opacity .6s ease, transform .8s cubic-bezier(.2,.9,.25,1.1); }
+          opacity: 0; transform: translateX(calc(var(--u) * -95)) rotate(-4deg);
+          transition: opacity .35s ease, transform .75s cubic-bezier(.16,1,.3,1); }
   .fact.on { opacity: 1; transform: rotate(-.6deg); }
+  .fact.out { opacity: 0; transform: translateX(calc(var(--u) * 110)) rotate(3deg);
+              transition: opacity .45s ease .15s, transform .6s cubic-bezier(.7,0,.84,0); }
   .fact small { display: block; font-family: "Special Elite", monospace; font-weight: 400; font-size: calc(var(--u) * 2.4); letter-spacing: .12em; opacity: .6; }
 
   /* 60秒版：年表（下から積み重なる） */
@@ -441,6 +446,7 @@ const Sound = (() => {
       noiseHit(t + .2, "lowpass", 500, .5, .22, 1.4);
     },
     lock(t) { [1320, 1980].forEach((f, i) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = f; env(g, t + i * .12, .003, .1, .12); o.connect(g); out(g, 1, .3); o.start(t + i * .12); o.stop(t + i * .12 + .2); }); },
+    swish(t) { noiseHit(t, "bandpass", 1800, .9, .16, .3); },                              // 札が去る風切り
     paper(t) { noiseHit(t, "highpass", 2500, .7, .2, .22); noiseHit(t + .05, "bandpass", 900, 1, .1, .15); },
     stamp(t) { thump(t, 70, 1, .4); noiseHit(t, "lowpass", 400, .7, .7, .12); },
     boom(t) { thump(t, 48, .8, 2.2); noiseHit(t, "lowpass", 180, .5, .35, 1.8); },
@@ -466,7 +472,8 @@ const Sound = (() => {
         pad(b + 2.2, [57, 60, 64], 7.4, .055); pad(b + 9.2, [53, 57, 60], 6.0, .05);
         pad(b + 14.8, [52, 55, 59], 5.6, .05); pad(b + 20.0, [57, 60, 64], 6.5, .045);
         [[8.2, 76], [9.4, 72], [11.0, 74], [12.6, 71], [14.2, 72], [16.0, 69], [17.6, 67], [19.2, 64], [21.0, 69]].forEach(([sec, m]) => pluck(b + sec, m, .08));
-        intro(); [9.0, 12.5, 16.0].forEach(sec => SE.paper(b + sec));
+        intro(); [9.0, 12.5, 16.0].forEach(sec => SE.paper(b + sec));             // 札が入る
+        [12.0, 15.5, 19.3].forEach(sec => SE.swish(b + sec));                        // 札が去る
         SE.stamp(b + 20.75); SE.boom(b + 23.5); fade(b + 27);
         return;
       }
@@ -719,9 +726,13 @@ async function play() {
   if (L) return playLong(f, at);
   // 9.0s / 12.5s / 16.0s 事実
   const facts = $("facts").children;
+  // 札は1枚ずつ：入る → 約3秒見せる → 右へ去る → 次の札
   await at(9000);  facts[0].classList.add("on");
+  await at(12000); facts[0].classList.add("out");
   await at(12500); facts[1].classList.add("on");
+  await at(15500); facts[1].classList.add("out");
   await at(16000); facts[2].classList.add("on");
+  await at(19300); facts[2].classList.add("out");
   // 20.0s 未解決の問い
   await at(20000); $("question").classList.add("on");
   // 23.5s ロゴ
