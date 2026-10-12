@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow"><!-- 撮影用ページ：検索エンジンに登録しない -->
+<title>撮影モード ｜ 開かずの書庫</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600;900&family=Special+Elite&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  /* 縦長 9:16 の舞台を画面の中央に置く。--u は舞台の幅の1% */
+  :root { --bg: #07090c; --ink: #e9e4d8; --dim: #8d8a82; --accent: #e0b25a; --hot: #ff5a4a;
+          --paper: #d9cdb2; --paper-ink: #2a241b; --red: #b3261e; --u: 4px; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  body { display: grid; place-items: center; font-family: "Noto Serif JP", serif; color: var(--ink); }
+  .stage { position: relative; width: calc(var(--u) * 100); height: calc(var(--u) * 177.78); overflow: hidden; background: var(--bg); }
+  #stars, #map { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .maplibregl-ctrl-attrib, .maplibregl-ctrl-logo { display: none !important; }
+  .vignette { position: absolute; inset: 0; pointer-events: none; z-index: 2;
+              background: radial-gradient(ellipse at 50% 45%, transparent 50%, rgba(0,0,0,.7) 100%); }
+  .layer { position: absolute; inset: 0; z-index: 5; pointer-events: none; opacity: 0; transition: opacity .9s ease; }
+  .layer.on { opacity: 1; }
+
+  /* ① 暗闇と錠前 */
+  #intro { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--u) * 9); opacity: 1; z-index: 8; transition: opacity 1.1s ease; }
+  #intro.off { opacity: 0; }
+  .lock { position: relative; width: calc(var(--u) * 16); height: calc(var(--u) * 20); }
+  .lock .shackle { position: absolute; left: 18%; top: 0; width: 64%; height: 55%;
+    border: calc(var(--u) * 1.6) solid #b9ab8c; border-bottom: 0; border-radius: calc(var(--u) * 8) calc(var(--u) * 8) 0 0;
+    transition: transform .45s cubic-bezier(.3,1.6,.5,1); transform-origin: 85% 100%; }
+  .lock .body { position: absolute; left: 0; bottom: 0; width: 100%; height: 58%; background: #b9ab8c; border-radius: calc(var(--u) * 1.4); }
+  .lock .body::after { content: ""; position: absolute; left: 50%; top: 32%; width: calc(var(--u) * 2.4); height: calc(var(--u) * 4.6);
+    transform: translateX(-50%); background: #2a241b; border-radius: calc(var(--u) * 1.2) calc(var(--u) * 1.2) 2px 2px; }
+  .lock.open .shackle { transform: translateY(-22%) rotate(-28deg); }
+  .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 9; transition: opacity .5s ease; }
+  .flash.on { opacity: .18; transition: none; }
+  .hook { text-align: center; font-weight: 900; font-size: calc(var(--u) * 6.4); line-height: 1.6; letter-spacing: .08em;
+          white-space: pre-line; opacity: 0; transform: translateY(calc(var(--u) * 2)); transition: opacity 1s ease, transform 1.2s ease; }
+  .hook.on { opacity: 1; transform: none; }
+
+  /* ② 照準と地名 */
+  .reticle { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 4; pointer-events: none; opacity: 0; transition: opacity .8s; }
+  .reticle.on { opacity: 1; }
+  .reticle i { position: absolute; left: 50%; top: 50%; border: 1px solid rgba(233,220,188,.6); border-radius: 50%; transform: translate(-50%, -50%) scale(.4); transition: transform 1.4s cubic-bezier(.2,.8,.2,1); }
+  .reticle.on i { transform: translate(-50%, -50%) scale(1); }
+  .reticle i:nth-child(1) { width: calc(var(--u) * 22); height: calc(var(--u) * 22); }
+  .reticle i:nth-child(2) { width: calc(var(--u) * 52); height: calc(var(--u) * 52); border-style: dashed; opacity: .6; }
+  .reticle i:nth-child(3) { width: calc(var(--u) * 82); height: calc(var(--u) * 82); opacity: .35; }
+  .reticle .box { position: absolute; left: 50%; top: 50%; width: calc(var(--u) * 14); height: calc(var(--u) * 14);
+    transform: translate(-50%, -50%) scale(2.4) rotate(45deg); transition: transform 1.1s cubic-bezier(.3,1.5,.4,1) .3s; }
+  .reticle.on .box { transform: translate(-50%, -50%); }
+  .reticle .box b { position: absolute; width: 28%; height: 28%; border: 0 solid var(--hot); }
+  .reticle .box b:nth-child(1) { left: 0; top: 0; border-width: 2px 0 0 2px; }
+  .reticle .box b:nth-child(2) { right: 0; top: 0; border-width: 2px 2px 0 0; }
+  .reticle .box b:nth-child(3) { left: 0; bottom: 0; border-width: 0 0 2px 2px; }
+  .reticle .box b:nth-child(4) { right: 0; bottom: 0; border-width: 0 2px 2px 0; }
+  .reticle .dot { position: absolute; left: 50%; top: 50%; width: calc(var(--u) * 2); height: calc(var(--u) * 2); margin: calc(var(--u) * -1) 0 0 calc(var(--u) * -1); border-radius: 50%; background: var(--hot); box-shadow: 0 0 12px var(--hot); }
+  .tag { position: absolute; left: 50%; top: 42%; transform: translate(calc(var(--u) * 9), calc(var(--u) * -12)); z-index: 4;
+         font-family: "Special Elite", monospace; font-size: calc(var(--u) * 2.6); letter-spacing: .2em; color: #ff8a7a; opacity: 0; transition: opacity .6s .9s; }
+  .reticle.on ~ .tag { opacity: 1; }
+  #place { top: 8%; text-align: center; }
+  #place .p { font-weight: 900; font-size: calc(var(--u) * 7.6); letter-spacing: .3em; text-shadow: 0 2px 16px rgba(0,0,0,.9); }
+  #place .s { margin-top: calc(var(--u) * 2); font-family: "Special Elite", monospace; font-size: calc(var(--u) * 3); color: var(--accent); letter-spacing: .15em; }
+
+  /* ③ 事実（ファイルのラベル風）。TikTok等のボタンと重ならないよう、下20%・右15%を避ける */
+  #facts { top: auto; bottom: 22%; left: 7%; right: 16%; height: auto; display: flex; flex-direction: column; gap: calc(var(--u) * 2.6); opacity: 1; }
+  .fact { background: var(--paper); color: var(--paper-ink); padding: calc(var(--u) * 2.6) calc(var(--u) * 3.6);
+          font-size: calc(var(--u) * 4.4); font-weight: 900; line-height: 1.5; letter-spacing: .04em;
+          box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 6) rgba(0,0,0,.6), calc(var(--u) * -.9) 0 0 var(--red);
+          opacity: 0; transform: translateX(calc(var(--u) * -8)) rotate(-1.5deg); transition: opacity .6s ease, transform .8s cubic-bezier(.2,.9,.25,1.1); }
+  .fact.on { opacity: 1; transform: rotate(-.6deg); }
+  .fact small { display: block; font-family: "Special Elite", monospace; font-weight: 400; font-size: calc(var(--u) * 2.4); letter-spacing: .12em; opacity: .6; }
+
+  /* ④ 未解決の問い */
+  #question { background: rgba(0,0,0,.78); display: flex; align-items: center; justify-content: center; z-index: 6; }
+  .qcard { position: relative; width: 82%; background: var(--paper); color: var(--paper-ink); padding: calc(var(--u) * 7) calc(var(--u) * 6) calc(var(--u) * 6);
+           box-shadow: 0 calc(var(--u) * 3) calc(var(--u) * 10) rgba(0,0,0,.7); transform: scale(.94) rotate(1deg); transition: transform 1s cubic-bezier(.2,.9,.25,1.1); }
+  #question.on .qcard { transform: rotate(-.8deg); }
+  .qcard .lb { font-family: "Special Elite", monospace; font-size: calc(var(--u) * 2.6); letter-spacing: .25em; color: var(--red); }
+  .qcard .q { margin-top: calc(var(--u) * 4); font-size: calc(var(--u) * 4.9); font-weight: 900; line-height: 1.75; white-space: pre-line; }
+  .qcard .stamp { position: absolute; right: calc(var(--u) * 4); top: calc(var(--u) * -4); border: calc(var(--u) * .8) solid var(--red); color: var(--red);
+                  padding: calc(var(--u) * .6) calc(var(--u) * 2.4); font-weight: 900; font-size: calc(var(--u) * 5); letter-spacing: .15em;
+                  background: rgba(217,205,178,.9); transform: rotate(-10deg) scale(2.2); opacity: 0; transition: transform .35s cubic-bezier(.3,1.6,.5,1) .7s, opacity .2s .7s; }
+  #question.on .stamp { transform: rotate(-10deg); opacity: .9; }
+  .qcard .no { margin-top: calc(var(--u) * 5); font-family: "Special Elite", monospace; font-size: calc(var(--u) * 2.6); opacity: .6; letter-spacing: .1em; }
+
+  /* ⑤ ロゴ */
+  #outro { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--u) * 3); z-index: 7; }
+  #outro .t { font-weight: 900; font-size: calc(var(--u) * 9); letter-spacing: .3em; }
+  #outro .r { font-family: "Special Elite", monospace; font-size: calc(var(--u) * 3); letter-spacing: .45em; color: var(--accent); }
+  #outro .c { margin-top: calc(var(--u) * 6); font-size: calc(var(--u) * 3.4); color: var(--dim); letter-spacing: .2em; }
+
+  /* 撮影開始の案内（撮影中は消える） */
+  #start { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(0,0,0,.6); }
+  #start .box { text-align: center; padding: 24px; max-width: 360px; }
+  #start h1 { font-size: 18px; letter-spacing: .2em; margin: 0 0 6px; }
+  #start p { font-size: 12px; line-height: 1.9; color: var(--dim); margin: 0 0 16px; }
+  #start select, #start button { font: 600 14px "Noto Serif JP", serif; letter-spacing: .1em; padding: 10px 18px; border-radius: 4px; cursor: pointer; }
+  #start select { background: #111; color: var(--ink); border: 1px solid #333; margin-bottom: 10px; width: 100%; }
+  #start button { background: var(--ink); color: #111; border: 0; width: 100%; }
+  #again { position: fixed; right: 12px; bottom: 12px; z-index: 20; display: none; font: 12px "Noto Serif JP", serif; padding: 6px 12px;
+           background: #111; color: var(--dim); border: 1px solid #333; border-radius: 999px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <canvas id="stars"></canvas>
+  <div id="map"></div>
+  <div class="vignette"></div>
+  <div class="reticle" id="reticle"><i></i><i></i><i></i><div class="box"><b></b><b></b><b></b><b></b></div><div class="dot"></div></div>
+  <div class="tag">TARGET LOCKED</div>
+
+  <div class="layer" id="place"><div class="p"></div><div class="s"></div></div>
+  <div class="layer" id="facts"></div>
+  <div class="layer" id="question"><div class="qcard"><div class="lb">UNRESOLVED ── 未解決の問い</div><div class="q"></div><span class="stamp"></span><div class="no"></div></div></div>
+  <div class="layer" id="outro"><div class="t">開かずの書庫</div><div class="r">AKAZU NO SHOKO</div><div class="c">続きは、プロフィールのリンクから</div></div>
+  <div class="layer on" id="intro"><div class="lock" id="lock"><div class="shackle"></div><div class="body"></div></div><div class="hook" id="hook"></div></div>
+  <div class="flash" id="flash"></div>
+</div>
+
+<div id="start">
+  <div class="box">
+    <h1>撮影モード</h1>
+    <p>縦長 9:16・約25秒。<br>先に画面録画を始めてから「撮影開始」を押してください。<br>この案内は撮影中は表示されません。</p>
+    <select id="pick"></select>
+    <button id="go" type="button">撮影開始</button>
+  </div>
+</div>
+<button id="again" type="button">もう一度</button>
+
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/maplibre-contour@0.1.0/dist/index.min.js" crossorigin="anonymous"></script>
+<script>
+/* ===== 台本（本番は記事データから自動で作る想定） ===== */
+const FILMS = {
+  oak: {
+    title: "オーク島マネー・ピット", no: "024", stamp: "未解決",
+    lng: -64.2995, lat: 44.5155, zoom: 14, pitch: 55, bearing: -30,
+    hook: "230年掘っても、\n底に届かない穴がある。",
+    place: "オーク島", sub: "CANADA ／ N 44.5155° W 64.2995°",
+    facts: [["1795", "少年が、地面のくぼみを見つける"], ["DEATHS", "捜索中の事故で、6人が死亡"], ["NOW", "宝は、いまも見つかっていない"]],
+    question: "もし何もなかったとしたら、\n人々は何を掘り続けて\nきたのか。"
+  },
+  tut: {
+    title: "ツタンカーメンの呪い", no: "020", stamp: "伝説化",
+    lng: 32.6014, lat: 25.7402, zoom: 14.5, pitch: 55, bearing: 20,
+    hook: "その墓が開かれた翌年、\n一人の男が死んだ。",
+    place: "王家の谷", sub: "EGYPT ／ N 25.7402° E 32.6014°",
+    facts: [["1922", "王家の谷で、王墓が見つかる"], ["1923", "発掘の出資者、カーナーヴォン卿が死去"], ["NOW", "「呪い」は新聞とともに広がった"]],
+    question: "呪いを必要としたのは、\n誰だったのか。"
+  },
+  nazca: {
+    title: "ナスカの地上絵", no: "005", stamp: "解釈途上",
+    lng: -75.1303, lat: -14.6924, zoom: 13, pitch: 45, bearing: -15,
+    hook: "砂漠に引かれた\n巨大な線と、動物たち。",
+    place: "ナスカ", sub: "PERU ／ S 14.6924° W 75.1303°",
+    facts: [["BC–", "紀元前後から、砂漠に描かれ始める"], ["THEORY", "暦説、儀礼の道説。決着していない"], ["2024", "AIの調査で、新たに303の地上絵"]],
+    question: "線は、誰に見せる\nためのものだったのか。"
+  },
+};
+
+/* ===== 舞台の大きさ（9:16 を画面に収める） ===== */
+function fit() {
+  const u = Math.min(innerWidth / 100, innerHeight / 177.78);
+  document.documentElement.style.setProperty("--u", u + "px");
+  if (window.__map) window.__map.resize(); // window.map は id="map" の要素を指してしまうため別名で持つ
+}
+addEventListener("resize", fit); fit();
+
+/* 星空 */
+(function () {
+  const c = document.getElementById("stars"), x = c.getContext("2d");
+  function draw() {
+    const d = devicePixelRatio || 1; c.width = c.clientWidth * d; c.height = c.clientHeight * d;
+    x.fillStyle = "#07090c"; x.fillRect(0, 0, c.width, c.height);
+    for (let i = 0; i < 260; i++) { x.globalAlpha = Math.random() * .7 + .1; x.fillStyle = "#dfe8ff";
+      x.beginPath(); x.arc(Math.random() * c.width, Math.random() * c.height, Math.random() * 1.1 * d, 0, 7); x.fill(); }
+  }
+  draw(); new ResizeObserver(draw).observe(c);
+})();
+
+/* ===== 地図（トップページと同じ線画） ===== */
+const dem = new mlcontour.DemSource({ url: "https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png", encoding: "terrarium", maxzoom: 13, worker: true });
+dem.setupMaplibre(maplibregl);
+const LINE = "#e9dcbc", BLUE = "#8fb3d9", empty = { type: "FeatureCollection", features: [] };
+const fade = (a, b, x, y) => ["interpolate", ["linear"], ["zoom"], a, x, b, y];
+const params = new URLSearchParams(location.search);
+let film = FILMS[params.get("id")] || FILMS.oak;
+const homeZoom = () => Math.log2(document.getElementById("stage").clientWidth * .82 * Math.PI / 512);
+
+const map = window.__map = new maplibregl.Map({
+  container: "map", center: [film.lng + 150, 20], zoom: homeZoom(), interactive: false, attributionControl: false,
+  pixelRatio: Math.min(devicePixelRatio || 1, 2), fadeDuration: 0,
+  style: {
+    version: 8, projection: { type: "globe" },
+    sources: {
+      land: { type: "geojson", data: empty }, coast: { type: "geojson", data: empty }, borders: { type: "geojson", data: empty },
+      omt: { type: "vector", url: "https://tiles.openfreemap.org/planet" },
+      contours: { type: "vector", maxzoom: 15, tiles: [dem.contourProtocolUrl({
+        thresholds: { 8: [200, 1000], 10: [100, 500], 11: [50, 250], 13: [20, 100], 14: [10, 50] },
+        elevationKey: "ele", levelKey: "level", contourLayer: "contours" })] }
+    },
+    layers: [
+      { id: "bg", type: "background", paint: { "background-color": "#0c131b" } },
+      { id: "land", type: "fill", source: "land", paint: { "fill-color": LINE, "fill-opacity": fade(5, 8, .05, 0) } },
+      { id: "water", type: "fill", source: "omt", "source-layer": "water", minzoom: 6, paint: { "fill-color": "#13263a", "fill-opacity": fade(6, 9, 0, .9) } },
+      { id: "borders", type: "line", source: "borders", paint: { "line-color": LINE, "line-width": .5, "line-dasharray": [2, 2], "line-opacity": fade(5, 8, .35, 0) } },
+      { id: "coast", type: "line", source: "coast", paint: { "line-color": LINE, "line-width": fade(1, 7, .9, 1.4), "line-opacity": fade(7, 9.5, .95, 0) } },
+      { id: "contour", type: "line", source: "contours", "source-layer": "contours", minzoom: 8,
+        paint: { "line-color": LINE, "line-width": ["case", [">", ["get", "level"], 0], 1.1, .6], "line-opacity": fade(8, 11, 0, .55) } },
+      { id: "waterway", type: "line", source: "omt", "source-layer": "waterway", minzoom: 8, paint: { "line-color": BLUE, "line-width": .9, "line-opacity": .7 } },
+      { id: "roads", type: "line", source: "omt", "source-layer": "transportation", minzoom: 8, paint: { "line-color": LINE, "line-width": fade(8, 16, .4, 1.6), "line-opacity": fade(8, 12, .3, .8) } }
+    ],
+    sky: { "sky-color": "#0b1a2e", "horizon-color": "#2a4a6e", "fog-color": "#0b1a2e", "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, .8, 5, .8, 7, 0] }
+  }
+});
+let ready = false;
+const dataReady = fetch("https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json").then(r => r.json()).then(w => new Promise(res => {
+  const set = () => {
+    map.getSource("land").setData(topojson.feature(w, w.objects.land));
+    map.getSource("coast").setData(topojson.mesh(w, w.objects.land));
+    map.getSource("borders").setData(topojson.mesh(w, w.objects.countries, (a, b) => a !== b));
+    res();
+  };
+  map.isStyleLoaded() ? set() : map.once("load", set);
+}));
+map.on("load", () => { ready = true; idleSpin(); });
+let spinOn = true;
+function idleSpin() { if (!spinOn) return; const c = map.getCenter(); c.lng -= 3; map.easeTo({ center: c, duration: 1000, easing: t => t }); }
+map.on("moveend", () => setTimeout(idleSpin, 0));
+
+/* ===== 撮影開始の案内 ===== */
+const pick = document.getElementById("pick");
+pick.innerHTML = Object.entries(FILMS).map(([k, f]) => `<option value="${k}">FILE No.${f.no}　${f.title}</option>`).join("");
+pick.value = Object.keys(FILMS).find(k => FILMS[k] === film);
+pick.addEventListener("change", () => { film = FILMS[pick.value]; history.replaceState(null, "", "?id=" + pick.value); });
+document.getElementById("go").addEventListener("click", () => { document.getElementById("start").style.display = "none"; play(); });
+document.getElementById("again").addEventListener("click", () => location.reload());
+
+/* ===== 本編（約25秒） ===== */
+const $ = id => document.getElementById(id);
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const ease3 = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+async function play() {
+  await dataReady; if (!ready) await new Promise(r => map.once("load", r));
+  const f = film;
+  // 準備：地球は現場の裏側を向けておく
+  spinOn = false; map.stop();
+  map.jumpTo({ center: [f.lng + 140, 15], zoom: homeZoom(), pitch: 0, bearing: 0 });
+  $("hook").textContent = f.hook;
+  $("place").querySelector(".p").textContent = f.place;
+  $("place").querySelector(".s").textContent = f.sub;
+  $("facts").innerHTML = f.facts.map(([k, v]) => `<div class="fact"><small>${k}</small>${v}</div>`).join("");
+  $("question").querySelector(".q").textContent = f.question;
+  $("question").querySelector(".stamp").textContent = f.stamp;
+  $("question").querySelector(".no").textContent = `FILE No.${f.no} ／ ${f.title}`;
+  const t0 = performance.now(); const at = ms => wait(Math.max(0, ms - (performance.now() - t0)));
+
+  // 0.0s 暗闇に、引きの一文
+  await at(300);  $("hook").classList.add("on");
+  // 1.9s カチャリ
+  await at(1900); $("lock").classList.add("open"); $("flash").classList.add("on"); requestAnimationFrame(() => requestAnimationFrame(() => $("flash").classList.remove("on")));
+  // 2.4s 暗闇が晴れて地球儀
+  await at(2400); $("intro").classList.add("off");
+  map.easeTo({ center: [f.lng, f.lat], zoom: homeZoom(), duration: 2400, easing: t => 1 - Math.pow(1 - t, 3) });
+  // 4.8s 現場へ降りる
+  await at(4800); map.easeTo({ center: [f.lng, f.lat], zoom: f.zoom - .5, pitch: f.pitch, bearing: f.bearing, duration: 3300, easing: ease3 });
+  // 7.6s 照準と地名
+  await at(7600); $("reticle").classList.add("on"); $("place").classList.add("on");
+  // 8.2s 以降、ゆっくり回り込む
+  await at(8200); map.easeTo({ bearing: f.bearing + 35, zoom: f.zoom, duration: 12000, easing: t => t });
+  // 9.0s / 12.5s / 16.0s 事実
+  const facts = $("facts").children;
+  await at(9000);  facts[0].classList.add("on");
+  await at(12500); facts[1].classList.add("on");
+  await at(16000); facts[2].classList.add("on");
+  // 20.0s 未解決の問い
+  await at(20000); $("question").classList.add("on");
+  // 23.5s ロゴ
+  await at(23500); $("outro").classList.add("on");
+  // 26.5s 終了
+  await at(26500); $("again").style.display = "block";
+}
+
+if (params.has("auto")) { document.getElementById("start").style.display = "none"; play(); }
+</script>
+</body>
+</html>
