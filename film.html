@@ -403,6 +403,10 @@ const Sound = (() => {
     latch(t) { thump(t, 90, .9, .35); noiseHit(t, "bandpass", 700, 1.2, .6, .18); noiseHit(t + .09, "bandpass", 1500, 3, .25, .08); },
     shimmer(t) { [2093, 2637, 3136].forEach((f, i) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = f; env(g, t + i * .06, .3, .022, 1.6); o.connect(g); out(g, .4, 1); o.start(t); o.stop(t + 2.3); }); },
     tick(t) { noiseHit(t, "highpass", 3200, 1, .18, .025); thump(t, 900, .05, .03); },        // ダイヤルのカチッ
+    seat(t) {                                                                               // 珠がはまる（澄んだキン＋重いコトッ）
+      thump(t, 170, .55, .16);
+      [1568, 2349, 3136].forEach((f, i) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = f; env(g, t, .002, [.12, .06, .03][i], .9); o.connect(g); out(g, .7, 1); o.start(t); o.stop(t + 1); });
+    },
     clunk(t) { thump(t, 120, .5, .18); noiseHit(t, "bandpass", 1100, 2, .3, .06); },         // ダイヤルがそろう
     slide(t) {                                                                              // 重い扉が左右に開く
       thump(t, 55, .9, 1.6);
@@ -437,8 +441,9 @@ const Sound = (() => {
       const a = ctx.currentTime + .05;
       const intro = () => {
         for (let k = .3; k < 1.55; k += .09 + Math.random() * .05) SE.tick(a + k);   // ダイヤルが回るカチカチ
-        [1.2, 1.4].forEach(sec => SE.clunk(a + sec));                                // 1つずつそろう
-        SE.latch(a + 1.6);                                                           // 3つ目でボルトが外れる
+        [1.2, 1.4, 1.6].forEach(sec => SE.clunk(a + sec));                           // ダイヤルが1つずつそろう
+        [1.42, 1.62, 1.82].forEach(sec => SE.seat(a + sec));                         // 珠が受け口にはまる
+        SE.latch(a + 1.85);                                                          // 3つそろって封印が解け、ボルトが外れる
         SE.shimmer(a + 2.0); SE.slide(a + 2.2); SE.lock(a + 7.9);
       };
       const fade = end => { master.gain.setValueAtTime(.9, end - 2.5); master.gain.linearRampToValueAtTime(.0001, end); };
@@ -479,6 +484,7 @@ const ease3 = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
    2.2〜3.5 扉が左右に割れて開き、カメラが寄る。埃が吹き飛び、文字が舞い上がる */
 const Intro = (() => {
   const C = { x: 500, y: 850 }, PA = "#e9dcbc", GO = "#e0b25a", RD = "#ff5a4a";
+  const LOCK = [1.2, 1.4, 1.6], FLY = .22, SEAT = LOCK.map(x => x + FLY), UNSEAL = 1.85;   // ダイヤルがそろう→珠が飛ぶ→はまる→封印解除
   const clamp = v => Math.max(0, Math.min(1, v));
   const outC = t => 1 - Math.pow(1 - t, 3);
   const inOut4 = t => t < .5 ? 8 * t ** 4 : 1 - Math.pow(-2 * t + 2, 4) / 2;
@@ -503,7 +509,11 @@ const Intro = (() => {
     const hex = [0, 60, 120, 180, 240, 300].map(a => pol(165, a + 30).join(",")).join(" ");
     let spokes = ""; for (let a = 0; a < 360; a += 60) { const [x1, y1] = pol(165, a), [x2, y2] = pol(238, a);
       spokes += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${PA}" stroke-width="3" stroke-opacity=".8"/>`; }
-    const marker = (r, col) => { const [x, y] = pol(r, 0); return `<path d="M${x - 11},${y - 16} L${x + 11},${y - 16} L${x},${y + 4} Z" fill="${col}"/>`; };
+    const marker = (r, col, cls = "") => { const [x, y] = pol(r, 0); return `<path class="${cls}" d="M${x - 11},${y - 16} L${x + 11},${y - 16} L${x},${y + 4} Z" fill="${col}"/>`; };
+    // 珠の受け口（中心のまわりに三角形に3つ）
+    const SOCK = [0, 120, 240].map(a => pol(74, a));
+    const socks = SOCK.map(([x, y]) => `<g class="sock"><circle cx="${x}" cy="${y}" r="31" fill="none" stroke="${PA}" stroke-opacity=".3"/><circle class="sring" cx="${x}" cy="${y}" r="25" fill="#0c1016" stroke="${PA}" stroke-width="2.5"/></g>`).join("");
+    const orbs = [0, 1, 2].map(() => `<g class="orb" opacity="0"><circle r="21" fill="url(#orbG)" filter="url(#glow)"/><circle r="7" fill="#fff" fill-opacity=".9"/></g>`).join("");
     const ringText = (`AKAZU NO SHOKO ・ SEALED ARCHIVE ・ FILE No.${f.no} ・ `).repeat(3);
     const draw = (r, w, o) => `<circle class="draw" cx="${C.x}" cy="${C.y}" r="${r}" fill="none" stroke="${PA}" stroke-width="${w}" stroke-opacity="${o}" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1"/>`;
     const art = `
@@ -511,15 +521,19 @@ const Intro = (() => {
         <path id="tRing" d="M ${C.x - 452},${C.y} a 452,452 0 1,1 904,0 a 452,452 0 1,1 -904,0" fill="none"/>
         <g class="dialT"><text font-size="22" letter-spacing="7" fill="${GO}" fill-opacity=".8" font-family="Special Elite, monospace"><textPath href="#tRing">${ringText}</textPath></text></g>
         ${draw(430, 3, .9)}${draw(345, 1.6, .55)}${draw(300, 1, .3)}${draw(250, 14, .55)}${draw(92, 2.5, .9)}
-        <g class="dialA">${ticks}${nums}${marker(388, RD)}</g>
-        <g class="dialB"><circle cx="${C.x}" cy="${C.y}" r="322" fill="none" stroke="${PA}" stroke-width="10" stroke-opacity=".35" stroke-dasharray="40 22"/>${marker(338, RD)}</g>
+        <g class="dialA">${ticks}${nums}${marker(388, RD, "mk")}</g>
+        <g class="dialB"><circle cx="${C.x}" cy="${C.y}" r="322" fill="none" stroke="${PA}" stroke-width="10" stroke-opacity=".35" stroke-dasharray="40 22"/>${marker(338, RD, "mk")}</g>
         <g class="bolts">${bolts}</g>
-        <g class="dialC"><circle cx="${C.x}" cy="${C.y}" r="250" fill="none" stroke="${GO}" stroke-width="14" stroke-opacity=".5" stroke-dasharray="120 37"/>${marker(266, RD)}</g>
+        <g class="dialC"><circle cx="${C.x}" cy="${C.y}" r="250" fill="none" stroke="${GO}" stroke-width="14" stroke-opacity=".5" stroke-dasharray="120 37"/>${marker(266, RD, "mk")}</g>
         <g class="core">
           <polygon points="${hex}" fill="none" stroke="${PA}" stroke-width="3" stroke-opacity=".85"/>${spokes}
-          <circle cx="${C.x}" cy="${C.y}" r="60" fill="#0c1016" stroke="${PA}" stroke-width="2"/>
-          <path class="key" d="M${C.x},${C.y - 26} a 13,13 0 1,1 -.1,0 Z M${C.x - 7},${C.y - 18} L${C.x + 7},${C.y - 18} L${C.x + 11},${C.y + 22} L${C.x - 11},${C.y + 22} Z" fill="${PA}"/>
+          <circle cx="${C.x}" cy="${C.y}" r="118" fill="#0c1016" fill-opacity=".85" stroke="${PA}" stroke-width="2" stroke-opacity=".7"/>
+          <polygon class="tri" points="${SOCK.map(p => p.join(",")).join(" ")}" fill="none" stroke="${RD}" stroke-width="3" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1" filter="url(#glow)"/>
+          ${socks}
+          <circle class="emblem" cx="${C.x}" cy="${C.y}" r="15" fill="none" stroke="${PA}" stroke-width="2"/>
         </g>
+        <circle class="pulse" cx="${C.x}" cy="${C.y}" r="60" fill="none" stroke="${GO}" stroke-width="5" opacity="0" filter="url(#glow)"/>
+        ${orbs}
         ${marker(472, GO)}
       </g>`;
     const half = side => `
@@ -535,6 +549,7 @@ const Intro = (() => {
         <clipPath id="clipR"><rect x="500" y="0" width="500" height="1778"/></clipPath>
         <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M50 0 H0 V50" fill="none" stroke="${PA}" stroke-opacity=".09" stroke-width="1"/></pattern>
         <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <radialGradient id="orbG" cx="38%" cy="35%" r="70%"><stop offset="0" stop-color="#fff6e8"/><stop offset=".35" stop-color="#ffb08a"/><stop offset="1" stop-color="#e2241a"/></radialGradient>
         <radialGradient id="flashG" cx="50%" cy="45%" r="60%"><stop offset="0" stop-color="#fff4d6" stop-opacity="1"/><stop offset=".35" stop-color="#ffd27a" stop-opacity=".45"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
         ${art}
       </defs>
@@ -542,7 +557,8 @@ const Intro = (() => {
       <rect id="seam" x="497" y="0" width="6" height="1778" fill="#ffe9b8" filter="url(#glow)" opacity="0"/>
       <rect id="flash" width="1000" height="1778" fill="url(#flashG)" opacity="0"/>`;
     const q = sel => svg.querySelector(sel), qa = sel => [...svg.querySelectorAll(sel)];
-    els = { draws: qa("#vArt .draw"), A: q(".dialA"), B: q(".dialB"), Cc: q(".dialC"), T: q(".dialT"), bolts: qa(".bolt"), core: q(".core"), key: q(".key"),
+    els = { draws: qa("#vArt .draw"), A: q(".dialA"), B: q(".dialB"), Cc: q(".dialC"), T: q(".dialT"), bolts: qa(".bolt"), core: q(".core"), mk: qa("#vArt .mk"), orbs: qa("#vArt .orb"), srings: qa("#vArt .sring"),
+            tri: q("#vArt .tri"), emblem: q("#vArt .emblem"), pulse: q("#vArt .pulse"),
             L: q("#halfL"), R: q("#halfR"), cam: q("#cam"), grids: qa(".grid"), edges: qa(".edge"), seam: q("#seam"), flash: q("#flash"),
             hudST: document.getElementById("hudST"), seals: [...document.querySelectorAll("#hudST b")], word: document.getElementById("hudW"),
             hudTL: document.getElementById("hudTL") };
@@ -556,7 +572,7 @@ const Intro = (() => {
   }
 
   function hudText(t) {   // 左上：記録番号と座標をタイプ
-    const lines = [`ARCHIVE FILE No.${film.no} ／ ${t >= 1.65 ? "UNSEALED" : "SEALED"}`, film.sub.replace(/^.*／\s*/, "")];
+    const lines = [`ARCHIVE FILE No.${film.no} ／ ${t >= UNSEAL ? "UNSEALED" : "SEALED"}`, film.sub.replace(/^.*／\s*/, "")];
     const n = Math.floor(clamp((t - .3) / 1.1) * lines.join("").length);
     let k = 0; return lines.map(l => { const part = l.slice(0, Math.max(0, n - k)); k += l.length; return part; }).join("\n");
   }
@@ -573,15 +589,31 @@ const Intro = (() => {
     e.B.setAttribute("transform", `rotate(${dial(.2, 1.2, -210)} ${C.x} ${C.y})`); e.B.setAttribute("opacity", show);
     e.Cc.setAttribute("transform", `rotate(${dial(.2, 1.4, 330)} ${C.x} ${C.y})`); e.Cc.setAttribute("opacity", show);
     e.T.setAttribute("transform", `rotate(${t * 14} ${C.x} ${C.y})`); e.T.setAttribute("opacity", clamp((t - .4) / .6));
-    // ボルトが引っ込む（1.6秒〜）
-    const br = 298 - 40 * outC(clamp((t - 1.6) / .3));
+    // ボルトが引っ込む（3つの珠がそろった 1.85秒〜）
+    const br = 298 - 40 * outC(clamp((t - UNSEAL) / .3));
     e.bolts.forEach((b, i) => { const [x, y] = pol(br, i * 30 + 15); b.setAttribute("transform", `translate(${x} ${y})`); b.setAttribute("opacity", show); });
-    // 中心の鍵が回り、赤く光る
-    e.core.setAttribute("transform", `rotate(${90 * backOut(clamp((t - 1.62) / .45))} ${C.x} ${C.y})`); e.core.setAttribute("opacity", show);
-    e.key.setAttribute("fill", t >= 1.6 ? RD : PA); e.key.setAttribute("filter", t >= 1.6 ? "url(#glow)" : "");
-    // 封印の表示
-    [1.2, 1.4, 1.6].forEach((s2, i) => e.seals[i].classList.toggle("on", t >= s2));
-    e.word.textContent = t >= 1.65 ? "UNSEALED" : "LOCKED"; e.hudST.classList.toggle("open", t >= 1.65);
+    // 珠：ダイヤルがそろうと、その赤い印が光る珠になって外れ、弧を描いて受け口にはまる
+    e.core.setAttribute("opacity", show);
+    const SOCK = [0, 120, 240].map(a => pol(74, a)), START = [388, 338, 266].map(r => { const [x, y] = pol(r, 0); return [x, y - 6]; });
+    const BEND = [[150, -40], [230, 40], [-230, 40]];   // 弧のふくらみ（上・右下・左下）
+    e.orbs.forEach((o, i) => {
+      e.mk[i].setAttribute("opacity", t < LOCK[i] ? 1 : 0);
+      if (t < LOCK[i]) { o.setAttribute("opacity", 0); return; }
+      const k = outC(clamp((t - LOCK[i]) / FLY)), [sx, sy] = START[i], [ex, ey] = SOCK[i];
+      const cx = (sx + ex) / 2 + BEND[i][0], cy = (sy + ey) / 2 + BEND[i][1];
+      const x = (1 - k) ** 2 * sx + 2 * (1 - k) * k * cx + k * k * ex, y = (1 - k) ** 2 * sy + 2 * (1 - k) * k * cy + k * k * ey;
+      const seated = t >= SEAT[i], sc = seated ? 1 + .45 * Math.exp(-(t - SEAT[i]) * 9) : 1.25 - .25 * k;
+      o.setAttribute("opacity", 1); o.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${sc.toFixed(3)})`);
+      e.srings[i].setAttribute("stroke", seated ? RD : PA); e.srings[i].setAttribute("filter", seated ? "url(#glow)" : "");
+    });
+    // 3つそろうと光の線で結ばれ、中心の紋が灯り、光の輪が広がる
+    e.tri.setAttribute("stroke-dashoffset", (1 - outC(clamp((t - UNSEAL + .03) / .28))).toFixed(4));
+    e.emblem.setAttribute("fill", t >= UNSEAL ? RD : "none"); e.emblem.setAttribute("filter", t >= UNSEAL ? "url(#glow)" : "");
+    const pq = clamp((t - UNSEAL) / .8);
+    e.pulse.setAttribute("r", (60 + 470 * outC(pq)).toFixed(1)); e.pulse.setAttribute("opacity", t >= UNSEAL ? (.9 * (1 - pq)).toFixed(3) : 0);
+    // 封印の表示（珠がはまるたびに点灯）
+    SEAT.forEach((s2, i) => e.seals[i].classList.toggle("on", t >= s2));
+    e.word.textContent = t >= UNSEAL ? "UNSEALED" : "LOCKED"; e.hudST.classList.toggle("open", t >= UNSEAL);
     e.hudST.style.opacity = (clamp((t - .5) / .4) * (1 - clamp((t - 2.15) / .35))).toFixed(3);
     e.hudTL.textContent = hudText(t); e.hudTL.style.opacity = (1 - clamp((t - 2.15) / .35)) * .8;
     // 切れ目の光 → 扉が左右に割れて開く・カメラが寄る
