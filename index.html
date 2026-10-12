@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow"><!-- テストページ：検索エンジンに登録しない -->
+<title>余白工房 ｜ 事件ファイル</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600;900&family=Special+Elite&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07090c;
+    --ink: #e9e4d8;
+    --ink-dim: #8d8a82;
+    --paper: #d9cdb2;
+    --paper-dark: #c4b593;
+    --paper-ink: #2a241b;
+    --red: #b3261e;
+    --accent: #e0b25a;
+    --line: rgba(233, 228, 216, .12);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Noto Serif JP", serif;
+    overflow: hidden;
+  }
+
+  /* ---------- layout ---------- */
+  .stage { position: fixed; inset: 0; display: grid; grid-template-columns: 1fr 320px; }
+  .globe-wrap { position: relative; overflow: hidden; background: var(--bg); }
+  #stars, #map { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #map { background: transparent; }
+  .maplibregl-canvas { outline: none; }
+  .maplibregl-ctrl-attrib { background: rgba(0,0,0,.4) !important; font-size: 10px; }
+  .maplibregl-ctrl-attrib a { color: var(--ink-dim) !important; }
+
+  .globe-wrap::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+    background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0,0,0,.65) 100%);
+  }
+
+  /* ---------- cinematic layers ---------- */
+  .veil {
+    position: absolute; inset: 0; z-index: 3; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 50%, rgba(0,0,0,.4), #000 80%);
+    opacity: 0; transition: opacity 1.8s ease;
+  }
+  .veil.on { opacity: .9; }
+  .caption {
+    position: absolute; left: 50%; top: 58%; z-index: 4; pointer-events: none;
+    transform: translateX(-50%); text-align: center; white-space: nowrap;
+    opacity: 0; letter-spacing: .15em;
+    transition: opacity 1.4s ease, letter-spacing 3s ease;
+    text-shadow: 0 2px 18px rgba(0,0,0,.95);
+  }
+  .caption.show { opacity: 1; letter-spacing: .4em; }
+  .caption .t { font-size: 34px; font-weight: 900; }
+  .caption .s { margin-top: 10px; font-family: "Special Elite", monospace; font-size: 12px; color: var(--accent); letter-spacing: .25em; }
+
+  /* ---------- brand / hud ---------- */
+  .brand { position: absolute; top: 28px; left: 32px; z-index: 5; pointer-events: none;
+           transition: opacity 1s ease, transform 1s ease, filter 1s ease; }
+  /* 調書が出ている間はレーダーと重ならないよう、ふわっと消える（戻る時は逆再生） */
+  .globe-wrap.with-detail .brand { opacity: 0; transform: translateY(-10px); filter: blur(4px); }
+  .brand h1 { margin: 0; font-weight: 900; font-size: 26px; letter-spacing: .3em; }
+  .brand p { margin: 6px 0 0; font-size: 12px; color: var(--ink-dim); letter-spacing: .25em; }
+
+  .hud {
+    position: absolute; left: 32px; bottom: 32px; z-index: 5; pointer-events: none;
+    font-family: "Special Elite", monospace; font-size: 13px; color: var(--ink-dim);
+    line-height: 1.8; letter-spacing: .08em;
+  }
+  .hud .coord { color: var(--accent); font-size: 15px; }
+  .hud .place { color: var(--ink); font-family: "Noto Serif JP", serif; font-size: 14px; }
+
+  /* ---------- markers ---------- */
+  .pin { width: 14px; height: 14px; cursor: pointer; } /* position はMapLibreの absolute を維持 */
+  .pin i {
+    position: absolute; inset: 4px; border-radius: 50%;
+    background: var(--pc, var(--accent)); box-shadow: 0 0 8px var(--pc, var(--accent));
+    opacity: .6; transition: opacity .4s, background .4s, box-shadow .4s;
+  }
+  .pin::after {
+    content: ""; position: absolute; inset: 0; border-radius: 50%;
+    border: 1px solid var(--pc, var(--accent)); opacity: 0;
+    animation: ping 2.4s ease-out infinite;
+  }
+  .pin.active i { opacity: 1; background: var(--hot, #ff5a4a); box-shadow: 0 0 14px var(--hot, #ff5a4a); }
+  .pin.active::after { border-color: var(--hot, #ff5a4a); opacity: 1; }
+  @keyframes ping { 0% { transform: scale(.6); opacity: .9; } 100% { transform: scale(3.2); opacity: 0; } }
+
+  /* ---------- reticle（地面に貼りつくレーダー） ---------- */
+  .reticle, .lock { --rc: #ff5a4a; }
+  .reticle { --size: 560px; width: var(--size); height: var(--size); pointer-events: none !important; }
+  .reticle > * { position: absolute; inset: 0; opacity: 0; transition: opacity 1s ease, transform 1.8s cubic-bezier(.2,.8,.2,1); }
+  .reticle svg { overflow: visible; transform: scale(.35) rotate(-40deg); }
+  .reticle.show svg { opacity: 1; transform: none; }
+  .reticle .sweep {
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, transparent 0deg, transparent 300deg, color-mix(in srgb, var(--rc) 30%, transparent) 359deg, color-mix(in srgb, var(--rc) 65%, white 10%) 360deg);
+    -webkit-mask: radial-gradient(circle, #000 78.4%, transparent 78.6%);
+            mask: radial-gradient(circle, #000 78.4%, transparent 78.6%);
+    animation: sweep 4.5s linear infinite;
+  }
+  .reticle.show .sweep { opacity: 1; transition-delay: .6s; }
+  .reticle .pulse { border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--rc) 70%, transparent); inset: 21.4%; }
+  .reticle.show .pulse { animation: pulse 2.6s ease-out infinite; animation-delay: .8s; }
+  @keyframes sweep { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0% { opacity: .9; transform: scale(.15); } 100% { opacity: 0; transform: scale(1); } }
+
+  /* 照準（画面と平行、ロックオンするように締まる） */
+  .lock { width: 64px; height: 64px; pointer-events: none !important; }
+  .lock .box {
+    position: absolute; inset: 0; opacity: 0;
+    transform: scale(2.6) rotate(45deg);
+    transition: opacity .5s ease, transform 1.2s cubic-bezier(.3,1.5,.4,1);
+  }
+  .lock.show .box { opacity: 1; transform: none; transition-delay: .3s; }
+  .lock .box i { position: absolute; width: 14px; height: 14px; border: 0 solid var(--rc); }
+  .lock .box i:nth-child(1) { left: 0; top: 0; border-width: 2px 0 0 2px; }
+  .lock .box i:nth-child(2) { right: 0; top: 0; border-width: 2px 2px 0 0; }
+  .lock .box i:nth-child(3) { left: 0; bottom: 0; border-width: 0 0 2px 2px; }
+  .lock .box i:nth-child(4) { right: 0; bottom: 0; border-width: 0 2px 2px 0; }
+  .lock .tag {
+    position: absolute; left: 74px; top: -6px; white-space: nowrap; opacity: 0;
+    font-family: "Special Elite", monospace; font-size: 10px; letter-spacing: .2em; color: color-mix(in srgb, var(--rc) 75%, white);
+    transition: opacity .6s ease 1.2s;
+  }
+  .lock.show .tag { opacity: 1; animation: blink 1.2s steps(2) 1.2s 3; }
+  @keyframes blink { 50% { opacity: .2; } }
+
+  /* ---------- file cabinet ---------- */
+  .cabinet {
+    position: relative; z-index: 6;
+    border-left: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(14,16,20,.88), rgba(7,9,12,.94));
+    overflow-y: auto; padding: 26px 22px 40px 28px;
+  }
+  .cabinet-head {
+    font-family: "Special Elite", monospace; color: var(--ink-dim);
+    font-size: 11px; letter-spacing: .2em; display: flex; justify-content: space-between;
+    border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 18px;
+  }
+
+  .file {
+    position: relative; display: block; text-decoration: none; color: var(--paper-ink);
+    margin: 0 0 10px; padding-top: 13px; outline: none;
+    transition: transform .35s cubic-bezier(.2,.8,.2,1), opacity .35s;
+  }
+  .file .tab {
+    position: absolute; top: 0; left: 12px; height: 15px; padding: 1px 9px 0;
+    background: var(--paper-dark); border-radius: 4px 4px 0 0;
+    font-size: 9px; letter-spacing: .1em; font-weight: 600; line-height: 14px;
+  }
+  .file .sheet {
+    position: relative; background: var(--paper); border-radius: 2px 4px 4px 4px;
+    padding: 8px 12px 9px;
+    box-shadow: 0 1px 0 rgba(0,0,0,.25), 0 6px 14px rgba(0,0,0,.45);
+    background-image: radial-gradient(circle at 85% 20%, rgba(120,90,40,.18), transparent 45%);
+    transition: box-shadow .35s;
+    overflow: hidden;
+  }
+  .file .no { font-family: "Special Elite", monospace; font-size: 9px; opacity: .6; letter-spacing: .08em; }
+  .file h2 { margin: 1px 4.6em 3px 0; font-size: 14.5px; line-height: 1.35; font-weight: 900; letter-spacing: .04em; }
+  .file .meta { font-size: 10.5px; opacity: .72; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file .stamp {
+    position: absolute; right: 9px; top: 12px;
+    border: 1.8px solid var(--stamp, var(--red)); color: var(--stamp, var(--red));
+    padding: 0 6px; font-weight: 900; font-size: 10.5px; letter-spacing: .12em;
+    transform: rotate(-9deg); opacity: .8; border-radius: 2px;
+    mix-blend-mode: multiply;
+  }
+  #files:hover .file:not(:hover) { opacity: .5; }
+  .file:hover, .file.active, .file:focus-visible { transform: translateX(-10px); }
+  .file:hover .sheet, .file.active .sheet, .file:focus-visible .sheet {
+    box-shadow: 0 1px 0 rgba(0,0,0,.25), 0 10px 26px rgba(0,0,0,.6), -3px 0 0 var(--hot, var(--red));
+  }
+
+  /* ---------- カテゴリー色 ---------- */
+  .cat-jiken  { --paper: #d9cdb2; --paper-dark: #c4b593; --stamp: #b3261e; --pc: #e0b25a; --hot: #ff5a4a; }
+  .cat-kaidan { --paper: #c8ccd6; --paper-dark: #a6abbd; --stamp: #4b3591; --pc: #9d8cff; --hot: #b48cff; }
+  .cat-toshi  { --paper: #c5d1bf; --paper-dark: #a3b39b; --stamp: #2f5d3a; --pc: #7fd19a; --hot: #4fe08a; }
+  .file .sheet::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--hot);
+    opacity: .85;
+  }
+  .file .tab { background: var(--paper-dark); }
+  .tap-hint { display: none; margin: -6px 0 14px; font-size: 10.5px; color: var(--ink-dim); letter-spacing: .12em; }
+  .tap-hint::before { content: "▸ "; color: var(--accent); }
+  @media (hover: none), (pointer: coarse) { .tap-hint { display: block; } }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: -8px 0 16px; font-size: 10px; color: var(--ink-dim); letter-spacing: .08em; }
+  .legend button {
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    font: inherit; color: inherit; background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 3px 9px; transition: border-color .2s, color .2s, opacity .2s;
+  }
+  .legend button:hover { color: var(--ink); }
+  .legend button.on { color: var(--ink); border-color: var(--hot, var(--ink-dim)); }
+  .legend button.off { opacity: .4; }
+  .legend i { width: 8px; height: 8px; border-radius: 50%; background: var(--hot); box-shadow: 0 0 6px var(--hot); }
+  .legend .shape { width: 7px; height: 7px; background: var(--ink-dim); box-shadow: none; }
+  .legend .shape.jp { border-radius: 1px; transform: rotate(45deg); }
+  .file.hidden { display: none; }
+  .pin.dim { opacity: .12; pointer-events: none; }
+  /* ルートの説明ラベル */
+  .route-tag {
+    pointer-events: none !important; white-space: nowrap;
+    font-family: "Special Elite", "Noto Serif JP", monospace; font-size: 10.5px; letter-spacing: .08em;
+    color: color-mix(in srgb, var(--rc) 70%, white); background: rgba(7,9,12,.72);
+    border: 1px solid color-mix(in srgb, var(--rc) 55%, transparent); border-radius: 2px;
+    padding: 2px 7px; opacity: 0; transition: opacity .8s ease;
+  }
+  .route-tag.show { opacity: 1; }
+  .route-tag.mid { font-size: 11.5px; border-style: dashed; }
+  .route-tag.mid::before { content: "┄ "; }
+
+  /* 国内の現場は◆ */
+  .pin.jp i { border-radius: 1px; transform: rotate(45deg); }
+  .pin.jp::after { border-radius: 2px; }
+
+  .note { font-size: 10px; color: var(--ink-dim); line-height: 1.8; margin-top: 22px; }
+
+  /* ---------- ロックオン後の詳細パネル（調書カード） ---------- */
+  .caption { transition: opacity 1.4s ease, letter-spacing 3s ease, left 1.4s cubic-bezier(.2,.8,.2,1); }
+  .globe-wrap.with-detail .caption { left: calc(50% - var(--detail-pad, 300px) / 2); }
+  .detail {
+    position: absolute; z-index: 5; right: 26px; top: 50%; width: 270px;
+    transform: translateY(-50%); pointer-events: none;
+  }
+  .detail.show { pointer-events: auto; }
+  .detail a.open { color: inherit; text-decoration: none; letter-spacing: .15em; font-size: 11px; }
+  .detail a.open:hover { text-decoration: underline; }
+
+  .detail .card {
+    position: relative; background: var(--paper); color: var(--paper-ink);
+    padding: 22px 20px 16px; border-radius: 3px;
+    background-image: radial-gradient(circle at 80% 15%, rgba(120,90,40,.2), transparent 45%);
+    box-shadow: 0 18px 40px rgba(0,0,0,.6), 0 2px 0 rgba(0,0,0,.25);
+    opacity: 0; transform: translateX(60px) rotate(4deg);
+    transition: opacity .7s ease, transform 1s cubic-bezier(.2,.9,.25,1.15);
+  }
+  .detail.show .card { opacity: 1; transform: rotate(-1.2deg); }
+  .detail .card::before { /* クリップ */
+    content: ""; position: absolute; top: -12px; left: 34px; width: 18px; height: 44px;
+    border: 2.5px solid #9aa0a6; border-radius: 9px; border-bottom-color: transparent;
+    box-shadow: 0 1px 0 rgba(0,0,0,.3);
+  }
+  .detail .hd { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-family: "Special Elite", monospace; font-size: 10px; letter-spacing: .12em; }
+  .detail .hd span { opacity: .65; }
+  /* ファイルを閉じる（地球儀へ戻る） */
+  .detail .close {
+    flex: none; cursor: pointer; font: 600 10px "Noto Serif JP", serif; letter-spacing: .1em;
+    color: var(--paper-ink); background: transparent; opacity: .7;
+    border: 1px solid rgba(42,36,27,.35); border-radius: 2px; padding: 2px 7px;
+    transition: opacity .2s, color .2s, border-color .2s, background .2s;
+  }
+  .detail .close:hover, .detail .close:focus-visible { opacity: 1; color: var(--stamp); border-color: var(--stamp); background: rgba(255,255,255,.25); outline: none; }
+  .detail h3 { margin: 6px 0 10px; font-size: 18px; font-weight: 900; letter-spacing: .05em; border-bottom: 1px solid rgba(42,36,27,.25); padding-bottom: 8px; }
+  .detail dl { margin: 0 0 10px; display: grid; grid-template-columns: 3em 1fr; gap: 3px 8px; font-size: 11.5px; }
+  .detail dt { opacity: .55; font-weight: 600; }
+  .detail dd { margin: 0; }
+  .detail dd.st { color: var(--stamp); font-weight: 900; letter-spacing: .1em; }
+  .detail p { margin: 0 0 10px; font-size: 12px; line-height: 1.85; }
+  .detail .q { font-size: 12px; font-weight: 600; color: var(--stamp); margin-bottom: 12px; }
+  .detail .q::before { content: "── "; }
+  .detail a.open { display: block; text-align: right; }
+
+  /* ---------- mobile ---------- */
+  @media (max-width: 860px) {
+    .reticle { --size: 340px; }
+    body { overflow: auto; }
+    .stage { position: static; display: block; }
+    .globe-wrap { position: sticky; top: 0; height: 58vh; z-index: 10; box-shadow: 0 10px 30px rgba(0,0,0,.6); }
+    .brand { top: 16px; left: 16px; }
+    .brand h1 { font-size: 20px; }
+    .hud { left: 16px; bottom: 14px; font-size: 11px; }
+    .hud .coord { font-size: 13px; }
+    .caption .t { font-size: 24px; }
+    .cabinet { border-left: 0; border-top: 1px solid var(--line); padding: 20px 16px 45vh; overflow: visible; }
+    .file:hover, .file.active { transform: none; }
+    #files:hover .file:not(:hover) { opacity: 1; }
+  }
+
+  @media (max-width: 420px) { .detail .close .long { display: none; } }
+  @media (max-width: 860px) {
+    .detail { left: 10px; right: 10px; top: auto; bottom: 10px; width: auto; transform: none; }
+    .detail .card {
+      max-height: var(--sheet-h, 50%); overflow-y: auto; overscroll-behavior: contain;
+      padding: 14px 14px 10px; transform: translateY(50px); border-radius: 4px;
+    }
+    .detail.show .card { transform: none; }
+    .detail .card::before { top: -9px; left: 22px; width: 14px; height: 34px; }
+    .detail h3 { font-size: 15px; margin: 4px 0 8px; padding-bottom: 6px; }
+    .detail dl { grid-template-columns: 2.6em 1fr; font-size: 11px; margin-bottom: 8px; }
+    .detail p { font-size: 11.5px; line-height: 1.75; margin-bottom: 8px; }
+    .detail .q { font-size: 11.5px; margin-bottom: 8px; }
+    /* 調書と重なる地名・HUDは隠す（タイトルは調書にある） */
+    .globe-wrap.with-detail .caption, .globe-wrap.with-detail .caption.show { opacity: 0; left: 50%; }
+    .hud { transition: opacity .6s; }
+    .globe-wrap.with-detail .hud { opacity: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pin::after { animation: none; }
+    .file, .veil, .caption { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <section class="globe-wrap" aria-label="事件現場の地球儀">
+    <canvas id="stars"></canvas>
+    <div id="map"></div>
+    <div class="veil" id="veil"></div>
+    <div class="caption" id="caption"><div class="t"></div><div class="s"></div></div>
+    <aside class="detail" id="detail" aria-live="polite"></aside>
+    <div class="brand">
+      <h1>余白工房</h1>
+      <p>言えなかったことを、静かな物語に</p>
+    </div>
+    <div class="hud" aria-live="polite">
+      <div class="place" id="hudPlace">世界の未解決ファイル</div>
+      <div class="coord" id="hudCoord">— — —</div>
+      <div id="hudMeta">FILES ON RECORD</div>
+    </div>
+  </section>
+
+  <aside class="cabinet" aria-label="事件ファイル一覧">
+    <div class="cabinet-head"><span>CASE FILES</span><span id="count"></span></div>
+    <div class="legend" id="legend"></div>
+    <p class="tap-hint">ファイルをタップすると、現場へ飛びます</p>
+    <div id="files"></div>
+    <p class="note">※テストページ。ファイルに触れると現場へ、クリックで記事を開きます。<br>地図データ: Natural Earth / OpenStreetMap</p>
+  </aside>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/maplibre-contour@0.1.0/dist/index.min.js" crossorigin="anonymous"></script>
+<script>
+/* ===== 記事データ（WordPress移行後はREST APIから取得する想定） ===== */
+const FILES = [
+  // genre: jiken=事件 / kaidan=怪談 / toshi=都市伝説、region: jp=国内 / world=海外
+  // 座標はブログ地図のキャプション地名から割り当てた目安
+  { id: "oak", genre: "jiken", region: "world", title: "オーク島マネー・ピット", date: "2026.10.01", stamp: "未解決",
+    occurred: "1795年 夏", site: "カナダ・ノバスコシア州", place: "オーク島",
+    lng: -64.2995, lat: 44.5155, zoom: 14, pitch: 55, bearing: -30, url: "https://yohakukoubou.hatenablog.com/entry/2026/10/01/074004" },
+  { id: "llorona", genre: "kaidan", region: "world", title: "ラ・ヨローナ", date: "2026.09.30", stamp: "伝承継続",
+    occurred: "16世紀〜", site: "メキシコ・中米の水辺", place: "メキシコシティ",
+    lng: -99.1036, lat: 19.2577, zoom: 13, pitch: 50, bearing: 15, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/30/073834" },
+  { id: "bermuda", genre: "jiken", region: "world", title: "バミューダ・トライアングル", date: "2026.09.29", stamp: "伝説化",
+    occurred: "1918年〜", site: "北大西洋", place: "バミューダ・トライアングル",
+    lng: -71.5, lat: 25.6, zoom: 3.8, pitch: 25, bearing: 0, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/29/074344",
+    area: [[-80.19, 25.76], [-64.78, 32.30], [-66.10, 18.47], [-80.19, 25.76]] },
+  { id: "isdal", genre: "jiken", region: "world", title: "イスダールの女", date: "2026.09.28", stamp: "身元不明",
+    occurred: "1970年 11月", site: "ノルウェー・ベルゲン近郊", place: "イスダレン渓谷",
+    lng: 5.3889, lat: 60.4146, zoom: 13.2, pitch: 60, bearing: 40, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/28/074104" },
+  { id: "tut", genre: "kaidan", region: "world", title: "ツタンカーメンの呪い", date: "2026.09.27", stamp: "伝説化",
+    occurred: "1922年 11月", site: "エジプト・ルクソール", place: "王家の谷",
+    lng: 32.6014, lat: 25.7402, zoom: 14.5, pitch: 55, bearing: 20, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/27/074500" },
+  { id: "earhart", genre: "jiken", region: "world", title: "アメリア・イアハート失踪事件", date: "2026.09.26", stamp: "行方不明",
+    occurred: "1937年 7月", site: "太平洋 ハウランド島へ向かう途中", place: "ハウランド島",
+    lng: -176.6170, lat: 0.8067, zoom: 13.5, pitch: 45, bearing: 0, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/26/073939",
+    route: [[146.9961, -6.7268], [183.3830, 0.8067]],
+    routeLabel: "最後の飛行ルート", routeNames: ["ラエ（出発）", "ハウランド島（目的地）"] },
+  { id: "baghdad", genre: "jiken", region: "world", title: "バグダッド電池", date: "2026.09.25", stamp: "用途不明",
+    occurred: "1936年 発見", site: "イラク・バグダッド近郊", place: "クユト・ラッブーア",
+    lng: 44.4800, lat: 33.2700, zoom: 12.5, pitch: 45, bearing: -10, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/25/074356" },
+  { id: "nessie", genre: "jiken", region: "world", title: "ネッシー", date: "2026.09.24", stamp: "未確認",
+    occurred: "565年〜", site: "スコットランド北部", place: "ネス湖",
+    lng: -4.4244, lat: 57.3229, zoom: 11, pitch: 60, bearing: 40, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/24/073901" },
+  { id: "bhangarh", genre: "kaidan", region: "world", title: "バンガール砦の呪い", date: "2026.09.23", stamp: "呪い継続中",
+    occurred: "1573年 築城", site: "インド・ラジャスタン州", place: "バンガール砦",
+    lng: 76.2873, lat: 27.0965, zoom: 14.5, pitch: 55, bearing: 0, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/23/074214" },
+  { id: "cooper", genre: "jiken", region: "world", title: "D.B.クーパー事件", date: "2026.09.22", stamp: "未解決",
+    occurred: "1971年 11月", site: "アメリカ・ポートランド〜シアトル", place: "降下したとされる一帯",
+    lng: -122.5600, lat: 45.9500, zoom: 9.5, pitch: 45, bearing: 0, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/22/074123",
+    route: [[-122.5951, 45.5898], [-122.3088, 47.4502]],
+    routeLabel: "305便の飛行ルート", routeNames: ["ポートランド（PDX）", "シアトル（SEA）"] },
+  { id: "voynich", genre: "jiken", region: "world", title: "ヴォイニッチ手稿", date: "2026.09.21", stamp: "未解読",
+    occurred: "15世紀前半", site: "アメリカ・イェール大学", place: "イェール大学",
+    lng: -72.9273, lat: 41.3113, zoom: 15.5, pitch: 55, bearing: -20, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/21/074123" },
+  { id: "hessdalen", genre: "jiken", region: "world", title: "ヘスダーレンの怪光", date: "2026.09.20", stamp: "観測中",
+    occurred: "1981年〜", site: "ノルウェー中部", place: "ヘスダーレン",
+    lng: 11.1886, lat: 62.7969, zoom: 11.5, pitch: 60, bearing: 30, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/20/074023" },
+  { id: "nazca", genre: "jiken", region: "world", title: "ナスカの地上絵", date: "2026.09.19", stamp: "解釈途上",
+    occurred: "紀元前後〜", site: "ペルー南部", place: "ナスカ",
+    lng: -75.1303, lat: -14.6924, zoom: 13, pitch: 45, bearing: -15, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/19/073925" },
+  { id: "woolpit", genre: "jiken", region: "world", title: "ウールピットの緑の子どもたち", date: "2026.09.18", stamp: "真相不明",
+    occurred: "12世紀半ば", site: "イングランド・サフォーク州", place: "ウールピット村",
+    lng: 0.8890, lat: 52.2246, zoom: 14.5, pitch: 50, bearing: 0, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/18/074356" },
+  { id: "somerton", genre: "jiken", region: "world", title: "サマートン男事件", date: "2026.09.17", stamp: "未解決",
+    occurred: "1948年 12月", site: "オーストラリア・アデレード近郊", place: "サマートン・ビーチ",
+    lng: 138.5110, lat: -34.9985, zoom: 15, pitch: 55, bearing: -60, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/17/074500" },
+  { id: "laughter", genre: "jiken", region: "world", title: "タンガニーカ笑い病", date: "2026.09.16", stamp: "原因不明",
+    occurred: "1962年 1月", site: "タンザニア・カゲラ州", place: "カシャシャ村",
+    lng: 31.6500, lat: -1.3000, zoom: 11, pitch: 45, bearing: 0, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/16/074117" },
+  { id: "chupacabra", genre: "kaidan", region: "world", title: "チュパカブラ", date: "2026.09.15", stamp: "正体不明",
+    occurred: "1995年 3月〜", site: "プエルトリコの農村", place: "カノーバナス",
+    lng: -65.9007, lat: 18.3797, zoom: 12, pitch: 50, bearing: 0, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/15/080923" },
+  { id: "celeste", genre: "jiken", region: "world", title: "メアリー・セレスト号事件", date: "2026.09.14", stamp: "行方不明",
+    occurred: "1872年 12月", site: "大西洋 アゾレス諸島の沖", place: "発見された海域",
+    lng: -17.2500, lat: 38.3300, zoom: 5.5, pitch: 30, bearing: 0, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/14/074130" },
+  { id: "dyatlov", genre: "jiken", region: "world", title: "ディアトロフ峠事件", date: "2026.09.13", stamp: "未解決",
+    occurred: "1959年 2月", site: "ロシア・ウラル山脈北部", place: "ディアトロフ峠",
+    lng: 59.4622, lat: 61.7544, zoom: 12.5, pitch: 60, bearing: 30, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/13/084926" },
+  { id: "gevaudan", genre: "jiken", region: "world", title: "ジェヴォーダンの獣", date: "2026.09.12", stamp: "正体不明",
+    occurred: "1764年〜1767年", site: "フランス南部", place: "ジェヴォーダン地方",
+    lng: 3.4000, lat: 44.7000, zoom: 9, pitch: 50, bearing: 0, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/12/160254" },
+  { id: "senrigan", genre: "jiken", region: "jp", title: "千里眼事件", date: "2026.09.11", stamp: "決着せず",
+    occurred: "1910年〜1911年", site: "熊本／丸亀／東京", place: "熊本",
+    lng: 130.7079, lat: 32.8031, zoom: 12, pitch: 45, bearing: 0, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/11/121942",
+    route: [[130.7079, 32.8031], [133.7978, 34.2894], [139.7671, 35.6812]],
+    routeLabel: "透視実験の舞台", routeNames: ["熊本（御船千鶴子）", "丸亀（長尾郁子）", "東京（帝大の検証）"] },
+  { id: "flannan", genre: "jiken", region: "world", title: "フラナン諸島 灯台守失踪事件", date: "2026.09.10", stamp: "行方不明",
+    occurred: "1900年 12月", site: "スコットランド北西 フラナン諸島", place: "フラナン諸島",
+    lng: -7.5890, lat: 58.2880, zoom: 14.5, pitch: 55, bearing: 0, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/10/225000" },
+  { id: "bellwitch", genre: "kaidan", region: "world", title: "ベル・ウィッチ", date: "2026.09.10", stamp: "真相不明",
+    occurred: "1817年〜1821年", site: "アメリカ・テネシー州", place: "テネシー州アダムズ",
+    lng: -87.0606, lat: 36.5877, zoom: 13.5, pitch: 50, bearing: 0, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/10/223111" },
+  { id: "masakado", genre: "kaidan", region: "jp", title: "将門塚", date: "2026.09.09", stamp: "鎮座",
+    occurred: "940年〜", site: "東京都千代田区大手町", place: "大手町",
+    lng: 139.7631, lat: 35.6866, zoom: 16.5, pitch: 60, bearing: 20, url: "https://yohakukoubou.hatenablog.com/entry/2026/09/09/134607" },
+];
+
+/* カテゴリー：色＝ジャンル、国内／海外＝ピンの形（WordPress移行後はカテゴリー／タグから） */
+const CATS = [
+  { key: "jiken",  label: "事件ファイル", name: "事件",     hot: "#ff5a4a" },
+  { key: "kaidan", label: "怪談ファイル", name: "怪談",     hot: "#b48cff" },
+  { key: "toshi",  label: "都市伝説ファイル", name: "都市伝説", hot: "#4fe08a" },
+];
+const catOf = f => CATS.find(c => c.key === f.genre) || CATS[0];
+const regionName = f => f.region === "jp" ? "国内" : "海外";
+
+/* ロックオン後に出す「あらまし」と「残された問い」（下書き：記事本文に合わせて差し替える想定） */
+const DETAILS = {
+  oak:       ["1795年、少年が見つけた地面のくぼみから始まった掘削は、230年たった今も続いている。捜索中の事故で6人が命を落としたが、底に何があるのかは、まだ誰も確かめていない。", "掘り続けさせているのは、宝なのか、物語なのか。"],
+  llorona:   ["水辺で子を探して泣く女の霊。16世紀の記録にさかのぼるとされ、今も子どもへの戒めとして語り継がれている。", "泣き声を聞いたのは、誰の記憶だったのか。"],
+  bermuda:   ["1918年の米海軍艦サイクロプス、1945年のフライト19。別々の消失は、1964年の雑誌記事で一つの「三角形」に束ねられた。後の調査では、事故が特に多いという根拠は見つかっていない。", "名前がついたとき、海は変わったのか。"],
+  isdal:     ["1970年、ベルゲン近郊の谷で焼けた女性の遺体が見つかった。少なくとも八つの偽名を使い分けていた彼女の本名は、今もわかっていない。", "彼女は、何から名前を隠していたのか。"],
+  tut:       ["1922年の王墓発見と、翌年のカーナーヴォン卿の死。「呪い」の物語は新聞とともに広がった。発掘関係者の死亡率を調べた研究では、特に高い傾向は見られなかったとされる。", "呪いを必要としたのは、誰だったのか。"],
+  earhart:   ["1937年、世界一周飛行の途中、ハウランド島を目指したまま消息を絶った。墜落説、不時着説が並び、骨の鑑定結果も時代とともに揺れている。", "最後の無線の向こうに、何が見えていたのか。"],
+  baghdad:   ["1936年、バグダッド近郊で見つかった、銅の筒と鉄の棒が入った壺。古代の電池とする説がある一方、巻物の保管容器とみる研究者も多い。", "用途を決めるのは、物か、見る側か。"],
+  nessie:    ["565年、聖コルンバの逸話に始まり、1930年代の目撃と一枚の写真で世界に広まった。写真は後に捏造と告白され、2019年の環境DNA調査でも大型の未知の生物の痕跡は見つからなかった。", "湖に、何を見たかったのか。"],
+  bhangarh:  ["1573年に築かれ、のちに人が去った砦。二つの呪いの伝説が語られ、日没後の立ち入り禁止もその証のように受け取られている。実際には保護遺跡に共通する規則だとされる。", "閉ざされた門が、物語を育てたのか。"],
+  cooper:    ["1971年、身代金を受け取った男が、飛行中の旅客機の後部階段からパラシュートで降下し、そのまま消えた。正体は今もわからない。", "彼は、地上にたどり着けたのか。"],
+  voynich:   ["15世紀前半の羊皮紙に、未知の文字と見たことのない植物の挿絵。数えきれない解読の試みを、今もすべて退け続けている。", "読めないことは、意味がないことなのか。"],
+  hessdalen: ["ノルウェーの小さな谷に現れる、正体不明の光。1980年代から計測機器による観測が続くが、決定的な説明はまだない。", "光は、何を照らしているのか。"],
+  nazca:     ["砂漠に描かれた巨大な線と動物の図形。暦とする説、儀礼の道筋とする説が並び、2024年にはAIを使った調査で新たに303の地上絵が見つかった。", "線は、誰に見せるためのものだったのか。"],
+  woolpit:   ["12世紀、イングランドの村に緑色の肌をした兄妹が現れたと記録されている。記録はいずれも伝聞で、真相はわからない。", "彼らが語った「光の弱い国」は、どこだったのか。"],
+  somerton:  ["1948年、アデレードの浜辺で見つかった身元不明の男性。ポケットの紙片には「終わった」を意味する言葉が残されていた。名前も死因も、長く謎のまま残された。", "「終わった」のは、何だったのか。"],
+  laughter:  ["1962年、タンガニーカの女子校で始まった笑いの発作は、周囲の村々へ広がり、学校の閉鎖にまで至った。集団心因性の現象とする見方が有力だが、決め手はない。", "笑いは、どこから伝わってきたのか。"],
+  chupacabra:["1995年、プエルトリコで家畜が血を抜かれたという報告から広まった謎の獣。中南米や米国南部でも目撃が相次いだが、多くは皮膚病にかかった野生動物と考えられている。", "獣の姿は、誰の不安を映していたのか。"],
+  celeste:   ["1872年、大西洋を無人のまま帆走する船が見つかった。積み荷も食料も残っていたが、乗っていた10人の行方は今もわからない。", "彼らは、何から離れようとしたのか。"],
+  dyatlov:   ["1959年、ウラル山脈で雪山を進んでいた9人が死亡した。テントは内側から切り裂かれ、遺体は離れた場所で見つかった。雪崩説が示されたが、異論も根強い。", "9人を外へ駆り立てたのは、何だったのか。"],
+  gevaudan:  ["1764年からの3年間、フランス南部で多くの人が獣に襲われた。何頭もの「獣」が仕留められたが、それで本当に終わったのかはわからない。", "獣とは、一頭のことだったのか。"],
+  senrigan:  ["明治末、熊本の御船千鶴子と丸亀の長尾郁子の「透視」をめぐり、学者たちが公開実験を重ねた。結論が出ないまま、二人の死とともに騒動は幕を閉じた。", "確かめたかったのは、能力か、学問の境界か。"],
+  flannan:   ["1900年、スコットランド沖の灯台から3人の灯台守が消えた。日誌には嵐の記述が残っていたとされるが、その夜の周辺は穏やかだったという。", "3人は、何を見に外へ出たのか。"],
+  bellwitch: ["1817年から数年、テネシーの農家ベル家を「声」が悩ませたと伝わる。家長の死まで語られるが、記録の多くは後年にまとめられたものだ。", "声を残したのは、出来事か、語り手か。"],
+  masakado:  ["討たれた平将門の首が飛来したと伝わる、大手町の塚。移転の話が持ち上がるたびに異変が語られ、今もオフィス街の一角に鎮座している。", "畏れは、この場所を守っているのか。"],
+};
+
+/* 演出のタイミング（ミリ秒） */
+const T = {
+  flyIn: 5200,     // 地球儀 → 現場
+  hold: 18500,     // 現場で止まる時間（照準が出てから約20秒。調書を読む時間）
+  flyOut: 4200,    // 現場 → 地球儀（フェードアウト）
+};
+
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const isMobile = () => matchMedia("(max-width: 860px)").matches; // 縦積みレイアウト（画面幅で判定）
+// マウスで操作できる端末か（幅が狭くてもマウスがあればホバーで反応させる）
+const hoverUI = () => matchMedia("(hover: hover) and (pointer: fine)").matches;
+// タッチ操作の端末（スマホ・タブレット）：ファイルをタップして初めて現場へ
+const touchUI = () => !hoverUI();
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, "0");
+
+/* ===== 星空 ===== */
+(function stars() {
+  const c = $("stars"), ctx = c.getContext("2d");
+  function draw() {
+    const dpr = devicePixelRatio || 1;
+    c.width = c.clientWidth * dpr; c.height = c.clientHeight * dpr;
+    ctx.fillStyle = "#07090c"; ctx.fillRect(0, 0, c.width, c.height);
+    for (let i = 0; i < 420; i++) {
+      ctx.globalAlpha = Math.random() * .7 + .1;
+      ctx.fillStyle = Math.random() < .1 ? "#ffd9a8" : "#dfe8ff";
+      ctx.beginPath(); ctx.arc(Math.random() * c.width, Math.random() * c.height, Math.random() * 1.1 * dpr, 0, 7); ctx.fill();
+    }
+  }
+  draw(); addEventListener("resize", draw);
+  new ResizeObserver(draw).observe(c);
+})();
+
+/* ===== 等高線：標高タイル(Terrarium)から maplibre-contour でその場生成 ===== */
+const demSource = new mlcontour.DemSource({
+  url: "https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png",
+  encoding: "terrarium", maxzoom: 13, worker: true
+});
+demSource.setupMaplibre(maplibregl);
+
+/* ===== 地球儀 ===== */
+/* 地球儀の直径を表示エリアの短辺の約80%に合わせる（直径 ≒ 512·2^z / π px） */
+const homeZoom = () => {
+  const r = document.querySelector(".globe-wrap").getBoundingClientRect();
+  const d = Math.max(140, Math.min(r.width, r.height) * 0.8);
+  return Math.log2(d * Math.PI / 512);
+};
+const map = new maplibregl.Map({
+  container: "map",
+  center: [20, 20],
+  zoom: homeZoom(),
+  attributionControl: { compact: true },
+  maxPitch: 70,
+  style: lineStyle()
+});
+
+/* --- 線画スタイル ---
+   広域：Natural Earth の海岸線・国境（GeoJSON）＋経緯線
+   ズーム時：OpenFreeMap のベクタータイルから川・道・建物を線で描く */
+function lineStyle() {
+  const LINE = "#e9dcbc", BLUE = "#8fb3d9";
+  const empty = { type: "FeatureCollection", features: [] };
+  const fade = (from, to, a, b) => ["interpolate", ["linear"], ["zoom"], from, a, to, b];
+  return {
+    version: 8,
+    projection: { type: "globe" },
+    sources: {
+      grat: { type: "geojson", data: graticule() },
+      land: { type: "geojson", data: empty, attribution: "Natural Earth" },
+      coast: { type: "geojson", data: empty },
+      borders: { type: "geojson", data: empty },
+      omt: { type: "vector", url: "https://tiles.openfreemap.org/planet",
+             attribution: "OpenFreeMap © OpenMapTiles © OpenStreetMap contributors" },
+      contours: { type: "vector", maxzoom: 15, attribution: "Terrain: Mapzen / AWS Terrain Tiles",
+        tiles: [demSource.contourProtocolUrl({
+          // ズームごとの [細線, 太線] 間隔（m）
+          thresholds: { 8: [200, 1000], 10: [100, 500], 11: [50, 250], 13: [20, 100], 14: [10, 50] },
+          elevationKey: "ele", levelKey: "level", contourLayer: "contours"
+        })] }
+    },
+    layers: [
+      { id: "bg", type: "background", paint: { "background-color": "#0c131b" } },
+      { id: "land", type: "fill", source: "land",
+        paint: { "fill-color": LINE, "fill-opacity": fade(5, 8, 0.045, 0) } },
+      { id: "water", type: "fill", source: "omt", "source-layer": "water", minzoom: 6,
+        paint: { "fill-color": "#13263a", "fill-opacity": fade(6, 9, 0, 0.9), "fill-antialias": false } },
+      { id: "grat", type: "line", source: "grat",
+        paint: { "line-color": BLUE, "line-width": 0.6, "line-opacity": fade(3, 6, 0.16, 0) } },
+      { id: "borders", type: "line", source: "borders",
+        paint: { "line-color": LINE, "line-width": 0.5, "line-dasharray": [2, 2], "line-opacity": fade(5, 8, 0.35, 0) } },
+      { id: "coast", type: "line", source: "coast",
+        paint: { "line-color": LINE, "line-width": fade(1, 7, 0.8, 1.4), "line-opacity": fade(7, 9.5, 0.9, 0) } },
+      { id: "contour-minor", type: "line", source: "contours", "source-layer": "contours", minzoom: 8,
+        filter: ["==", ["get", "level"], 0],
+        paint: { "line-color": LINE, "line-width": 0.6, "line-opacity": fade(8, 11, 0, 0.32) } },
+      { id: "contour-major", type: "line", source: "contours", "source-layer": "contours", minzoom: 8,
+        filter: [">", ["get", "level"], 0],
+        paint: { "line-color": LINE, "line-width": 1.1, "line-opacity": fade(8, 11, 0, 0.7) } },
+      { id: "waterway", type: "line", source: "omt", "source-layer": "waterway", minzoom: 8,
+        paint: { "line-color": BLUE, "line-width": fade(8, 15, 0.4, 1.4), "line-opacity": 0.7 } },
+      { id: "roads", type: "line", source: "omt", "source-layer": "transportation", minzoom: 8,
+        paint: { "line-color": LINE, "line-width": fade(8, 16, 0.4, 1.6), "line-opacity": fade(8, 12, 0.3, 0.8) } },
+      { id: "buildings", type: "fill", source: "omt", "source-layer": "building", minzoom: 13,
+        paint: { "fill-color": "rgba(0,0,0,0)", "fill-outline-color": "rgba(233,220,188,.55)" } }
+    ],
+    sky: {
+      "sky-color": "#0b1a2e", "horizon-color": "#2a4a6e", "fog-color": "#0b1a2e",
+      "sky-horizon-blend": 0.5, "horizon-fog-blend": 0.5, "fog-ground-blend": 0.6,
+      "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, 0.8, 5, 0.8, 7, 0]
+    }
+  };
+}
+
+function graticule() {
+  const features = [];
+  for (let lng = -180; lng < 180; lng += 15) {
+    const c = []; for (let lat = -80; lat <= 80; lat += 2) c.push([lng, lat]);
+    features.push({ type: "Feature", geometry: { type: "LineString", coordinates: c } });
+  }
+  for (let lat = -75; lat <= 75; lat += 15) {
+    const c = []; for (let lng = -180; lng <= 180; lng += 2) c.push([lng, lat]);
+    features.push({ type: "Feature", geometry: { type: "LineString", coordinates: c } });
+  }
+  return { type: "FeatureCollection", features };
+}
+
+/* 海岸線・国境データ（約750KB）を読み込み */
+fetch("https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json")
+  .then(r => r.json())
+  .then(w => {
+    const set = () => {
+      map.getSource("land").setData(topojson.feature(w, w.objects.land));
+      map.getSource("coast").setData(topojson.mesh(w, w.objects.land));
+      map.getSource("borders").setData(topojson.mesh(w, w.objects.countries, (a, b) => a !== b));
+    };
+    map.isStyleLoaded() ? set() : map.once("load", set);
+  })
+  .catch(e => console.warn("海岸線データの読み込み失敗:", e));
+
+map.scrollZoom.disable();
+map.dragRotate.disable();
+map.touchZoomRotate.disableRotation();
+
+/* --- ゆっくり自転 --- */
+let spinning = !reduceMotion, dragging = false;
+function spin() {
+  if (!spinning || dragging) return;
+  const c = map.getCenter(); c.lng -= 2.2;
+  map.easeTo({ center: c, duration: 1000, easing: t => t });
+}
+// ドラッグ中だけ止める（mousedown/touchstart で止めると、離した合図を取りこぼした時に止まったままになる）
+map.on("dragstart", () => { dragging = true; });
+map.on("dragend", () => { dragging = false; spin(); });
+addEventListener("pointerup", () => { if (dragging) { dragging = false; spin(); } });
+// 見張り：地球儀表示で止まっていたら自転を再開
+setInterval(() => {
+  if (current === null && spinning && !map.isMoving()) { dragging = false; spin(); }
+}, 1500);
+map.on("moveend", spin);
+map.on("resize", () => { if (current === null) map.jumpTo({ zoom: homeZoom() }); });
+
+/* --- レーダー＆照準（ピンより先に追加して下に敷く） --- */
+const reticleEl = document.createElement("div");
+reticleEl.className = "reticle";
+reticleEl.innerHTML = `<div class="sweep"></div><div class="pulse"></div>${reticleSvg()}`;
+const reticle = new maplibregl.Marker({ element: reticleEl, pitchAlignment: "map", rotationAlignment: "map" })
+  .setLngLat([0, 0]).addTo(map);
+
+const lockEl = document.createElement("div");
+lockEl.className = "lock";
+lockEl.innerHTML = `<div class="box"><i></i><i></i><i></i><i></i></div><div class="tag">TARGET LOCKED</div>`;
+const lock = new maplibregl.Marker({ element: lockEl }).setLngLat([0, 0]).addTo(map);
+
+function reticleSvg() {
+  const C = 280, ring = "#e9dcbc", red = "#ff5a4a";
+  let ticks = "";
+  for (let a = 0; a < 360; a += 5) {
+    const long = a % 30 === 0, r1 = 220, r2 = long ? 238 : (a % 10 === 0 ? 229 : 225);
+    const s = Math.sin(a * Math.PI / 180), c = Math.cos(a * Math.PI / 180);
+    ticks += `<line x1="${C + r1 * s}" y1="${C - r1 * c}" x2="${C + r2 * s}" y2="${C - r2 * c}" stroke="${ring}" stroke-opacity="${long ? .8 : .45}" stroke-width="${long ? 1.4 : .8}"/>`;
+  }
+  let deg = "";
+  for (let a = 30; a < 360; a += 30) {
+    const s = Math.sin(a * Math.PI / 180), c = Math.cos(a * Math.PI / 180);
+    deg += `<text x="${C + 254 * s}" y="${C - 254 * c + 3}" text-anchor="middle">${String(a).padStart(3, "0")}</text>`;
+  }
+  return `<svg viewBox="0 0 560 560" xmlns="http://www.w3.org/2000/svg">
+    <g fill="none" stroke="${ring}">
+      <circle cx="${C}" cy="${C}" r="70" stroke-opacity=".7" stroke-width="1.2"/>
+      <circle cx="${C}" cy="${C}" r="145" stroke-opacity=".4" stroke-dasharray="1 5"/>
+      <circle cx="${C}" cy="${C}" r="220" stroke-opacity=".75" stroke-width="1.2"/>
+      <circle cx="${C}" cy="${C}" r="246" stroke-opacity=".25" stroke-dasharray="14 6"/>
+    </g>
+    <g style="stroke: var(--rc)" stroke-opacity=".75" stroke-width="1">
+      <line x1="${C}" y1="20" x2="${C}" y2="${C - 26}"/><line x1="${C}" y1="${C + 26}" x2="${C}" y2="540"/>
+      <line x1="20" y1="${C}" x2="${C - 26}" y2="${C}"/><line x1="${C + 26}" y1="${C}" x2="540" y2="${C}"/>
+    </g>
+    ${ticks}
+    <g fill="${ring}" fill-opacity=".6" font-family="Special Elite, monospace" font-size="9" letter-spacing="1">${deg}</g>
+    <text x="${C}" y="12" text-anchor="middle" style="fill: var(--rc)" font-family="Special Elite, monospace" font-size="16">N</text>
+  </svg>`;
+}
+
+/* ===== 詳細パネル ===== */
+const wrapEl = document.querySelector(".globe-wrap");
+const detailEl = $("detail");
+let detailFor = null;
+const detailPad = () => isMobile() ? 0 : 310; // PC：右に詳細パネルの幅＋余白
+const sheetH = () => Math.round(wrapEl.getBoundingClientRect().height * 0.52); // スマホ：下の調書の高さ
+const detailPadding = () => isMobile()
+  ? { right: 0, left: 0, top: 0, bottom: sheetH() }
+  : { right: detailPad(), left: 0, top: 0, bottom: 0 };
+const fileNo = f => String(FILES.length - FILES.indexOf(f)).padStart(3, "0");
+
+function renderDetail(f) {
+  const [sum, q] = DETAILS[f.id] || ["", ""];
+  const open = `<a class="open" href="${f.url}" target="_blank" rel="noopener">ファイルを開く →</a>`;
+  return `<div class="card">
+      <div class="hd"><span>調書 No.${fileNo(f)} ／ ${catOf(f).label}｜${regionName(f)}</span><button type="button" class="close" title="地球儀へ戻る（Esc）"><span class="long">ファイルを</span>閉じる ×</button></div>
+      <h3>${f.title}</h3>
+      <dl><dt>発生</dt><dd>${f.occurred}</dd><dt>現場</dt><dd>${f.site}</dd><dt>状況</dt><dd class="st">${f.stamp}</dd></dl>
+      <p>${sum}</p><div class="q">${q}</div>${open}</div>`;
+}
+function showDetail(f) {
+  detailFor = f;
+  detailEl.className = "detail cat-" + catOf(f).key;
+  detailEl.style.setProperty("--rc", catOf(f).hot);
+  wrapEl.style.setProperty("--detail-pad", detailPad() + "px");
+  detailEl.style.setProperty("--sheet-h", (sheetH() - 10) + "px");
+  detailEl.innerHTML = renderDetail(f);
+  wrapEl.classList.add("with-detail");
+  requestAnimationFrame(() => requestAnimationFrame(() => detailEl.classList.add("show")));
+}
+/* 「ファイルを閉じる」ボタンと Esc キーで地球儀へ戻る */
+detailEl.addEventListener("click", e => { if (e.target.closest(".close")) { e.preventDefault(); closeFile(); } });
+addEventListener("keydown", e => { if (e.key === "Escape") closeFile(); });
+function closeFile() {
+  if (current === null) return;
+  clearTimeout(timer);
+  goHome(); // 照準・調書を消し、暗転しながら地球儀へ → 自転再開
+}
+function hideDetail() {
+  detailFor = null; touchReading = false;
+  detailEl.classList.remove("show");
+  wrapEl.classList.remove("with-detail");
+}
+/* パネル上にカーソルがある間は地球儀に戻さない（リンクを押せるように） */
+let touchReading = false; // スマホで調書に触れている（離して5秒まで）
+// 読んでいる判定は :hover で毎回確かめる（新しいタブを開いた時などに離脱の合図を取りこぼさない）
+const readingDetail = () => detailEl.classList.contains("show") && (detailEl.matches(":hover") || touchReading);
+addEventListener("blur", () => { touchReading = false; });
+detailEl.addEventListener("pointerenter", () => clearTimeout(timer));
+detailEl.addEventListener("pointerleave", e => {
+  if (e.pointerType === "touch") return; // タッチは下の touchend で扱う
+  if (!filesEl.contains(e.relatedTarget)) queueHome();
+});
+let touchTimer;
+detailEl.addEventListener("touchstart", () => { touchReading = true; clearTimeout(touchTimer); }, { passive: true });
+detailEl.addEventListener("touchend", () => { clearTimeout(touchTimer); touchTimer = setTimeout(() => { touchReading = false; }, 5000); }, { passive: true });
+function showReticle(f) {
+  if (!f) hideDetail();
+  if (f) { const hot = catOf(f).hot; reticleEl.style.setProperty("--rc", hot); lockEl.style.setProperty("--rc", hot); }
+  if (!f) { reticleEl.classList.remove("show"); lockEl.classList.remove("show"); return; }
+  reticle.setLngLat([f.lng, f.lat]); lock.setLngLat([f.lng, f.lat]);
+  { const r = wrapEl.getBoundingClientRect(); // 照準は空いている範囲に収める
+    const size = isMobile() ? Math.min(340, r.width * 0.9, (r.height - sheetH()) * 1.25)
+                            : Math.min(560, (r.width - detailPad()) * 0.95, r.height * 1.1);
+    reticleEl.style.setProperty("--size", Math.round(size) + "px"); }
+  reticleEl.classList.add("show"); lockEl.classList.add("show");
+}
+
+/* --- マーカー --- */
+let lastMove = 0; // 最後にマウスを動かした時刻
+addEventListener("pointermove", () => { lastMove = performance.now(); }, { passive: true });
+const userMoved = () => performance.now() - lastMove < 150;
+const pins = {};
+FILES.forEach(f => {
+  const el = document.createElement("div");
+  el.className = "pin cat-" + catOf(f).key + (f.region === "jp" ? " jp" : ""); el.innerHTML = "<i></i>"; el.title = f.title;
+  // ピン：0.35秒止めたら開始。開始後は地球儀が動いてピンがカーソルから離れても最後まで再生し、終わったら自転へ戻る
+  el.addEventListener("mouseenter", () => {
+    if (!userMoved()) return; // 地球儀が動いてピンがカーソルの下に来ただけなら無視
+    clearTimeout(timer);
+    timer = setTimeout(() => { focusFile(f.id); homeAfterPlay = true; }, 350);
+  });
+  el.addEventListener("mouseleave", () => { if (current !== f.id) clearTimeout(timer); });
+  el.addEventListener("click", () => touchUI() ? tapFocus(f.id) : open(f.url, "_blank"));
+  pins[f.id] = new maplibregl.Marker({ element: el }).setLngLat([f.lng, f.lat]).addTo(map);
+});
+
+map.on("load", () => {
+  map.addSource("area", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  map.addLayer({ id: "area-fill", type: "fill", source: "area", paint: { "fill-color": "#ff5a4a", "fill-opacity": 0.08 } });
+  map.addLayer({ id: "area-line", type: "line", source: "area",
+    paint: { "line-color": "#ff5a4a", "line-width": 1.6, "line-dasharray": [3, 2], "line-opacity": 0.9 } });
+  spin();
+});
+
+/* ===== ファイル一覧 ===== */
+const filesEl = $("files");
+/* 凡例＝絞り込みボタン（ジャンル・地域） */
+const FILTERS = [
+  { key: "all", name: "すべて", test: () => true },
+  ...CATS.filter(c => FILES.some(f => catOf(f) === c))
+    .map(c => ({ key: c.key, name: c.name, cls: "cat-" + c.key, dot: "<i></i>", test: f => catOf(f) === c })),
+  { key: "jp", name: "国内", dot: '<i class="shape jp"></i>', test: f => f.region === "jp" },
+  { key: "world", name: "海外", dot: '<i class="shape"></i>', test: f => f.region !== "jp" },
+];
+let filter = "all";
+function applyFilter(key) {
+  filter = key;
+  const t = FILTERS.find(x => x.key === key).test;
+  let n = 0;
+  FILES.forEach(f => {
+    const ok = t(f); if (ok) n++;
+    document.querySelector(`.file[data-id="${f.id}"]`).classList.toggle("hidden", !ok);
+    pins[f.id].getElement().classList.toggle("dim", !ok);
+  });
+  document.querySelectorAll(".legend button").forEach(b => {
+    b.classList.toggle("on", b.dataset.key === key);
+    b.classList.toggle("off", key !== "all" && b.dataset.key !== key && b.dataset.key !== "all");
+  });
+  shown = n;
+  if (!document.querySelector(".file.active")) setCount();
+}
+let shown = FILES.length;
+const setCount = (i) => { $("count").textContent = i ? `${pad(i)} / ${pad(shown)}` : `${pad(shown)} FILES`; };
+$("legend").innerHTML = FILTERS.map(x =>
+  `<button type="button" class="${x.cls || ""}" data-key="${x.key}">${x.dot || ""}${x.name}</button>`).join("");
+$("legend").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  applyFilter(b.dataset.key === filter ? "all" : b.dataset.key);
+});
+FILES.forEach((f, i) => {
+  const a = document.createElement("a");
+  a.className = "file cat-" + catOf(f).key; a.href = f.url; a.target = "_blank"; a.rel = "noopener"; a.dataset.id = f.id;
+  a.innerHTML = `
+    <span class="tab">${catOf(f).label}｜${regionName(f)}</span>
+    <div class="sheet">
+      <div class="no">FILE No.${String(FILES.length - i).padStart(3, "0")} ／ ${f.date}</div>
+      <h2>${f.title}</h2>
+      <div class="meta">${f.occurred} ／ ${f.site}</div>
+      <span class="stamp">${f.stamp}</span>
+    </div>`;
+  a.addEventListener("focus", () => { if (!touchUI()) queueFocus(f.id); }); // キーボード操作用
+  filesEl.appendChild(a);
+});
+applyFilter("all");
+$("hudMeta").textContent = `FILES ON RECORD : ${pad(FILES.length)}`;
+/* カーソル位置のファイルに常に追従（カード間を素早く移動しても取りこぼさない） */
+let hoverId = null; // 同じカード内の移動では再トリガーしない
+filesEl.addEventListener("pointerover", e => {
+  if (touchUI()) return;
+  const el = e.target.closest(".file");
+  const id = el ? el.dataset.id : null;
+  if (id === hoverId) return;
+  hoverId = id;
+  if (id) queueFocus(id); else clearTimeout(timer); // カードの隙間では保留中の切り替えを取り消す
+});
+filesEl.addEventListener("mouseleave", () => { hoverId = null; if (!touchUI()) queueHome(); });
+/* タッチ端末：ファイルをタップ → 現場へ（記事へは調書の「ファイルを開く」から）。PCのクリックは今まで通り記事を開く */
+filesEl.addEventListener("click", e => {
+  const el = e.target.closest(".file");
+  if (!el || !touchUI()) return;
+  e.preventDefault();
+  tapFocus(el.dataset.id);
+});
+function tapFocus(id) {
+  clearTimeout(timer);
+  focusFile(id);          // 同じファイルを再生中なら何もしない（演出が終わっていれば再生し直す）
+  homeAfterPlay = true;   // 演出が終わったら自転へ戻る
+}
+
+/* ===== 演出シーケンス =====
+   地球儀 →(必ず地球儀の高さを経由して)現場へズームイン → 少し止まる
+   → 暗転しながら地球儀へ戻る（フェードアウト）
+   ホバー中はその地点を正面にしたまま待機、離れると再び自転 */
+let current = null, seq = 0, timer = null, played = false; // played: 現場→地球儀まで演出が終わった
+const later = (ms, fn) => { const s = seq; setTimeout(() => s === seq && fn(), ms); };
+
+// 調書が出ている間は、別ファイルの上で少し止まった時だけ切り替える（調書へ向かう途中で通過したファイルに反応しない）
+function queueFocus(id) {
+  clearTimeout(timer);
+  const wait = detailEl.classList.contains("show") && id !== current ? 450 : 90;
+  timer = setTimeout(() => focusFile(id), wait);
+}
+// 調書が出た後は、一覧から外れてもすぐには戻さない（読み終わる時間を確保し、地球儀へ戻った後に自転へ）
+let homeAfterPlay = false;
+function queueHome() {
+  clearTimeout(timer);
+  if (detailEl.classList.contains("show")) { homeAfterPlay = true; return; }
+  timer = setTimeout(goHome, 600);
+}
+
+function markActive(id) {
+  document.querySelectorAll(".file").forEach(el => el.classList.toggle("active", el.dataset.id === id));
+  Object.entries(pins).forEach(([k, m]) => m.getElement().classList.toggle("active", k === id));
+}
+/* ルートの両端に地点名、現場に最も近い線上に「何の線か」を表示 */
+let routeTags = [];
+function routeTag(lngLat, text, cls, color, anchor) {
+  const el = document.createElement("div");
+  el.className = "route-tag " + cls; el.textContent = text; el.style.setProperty("--rc", color);
+  const m = new maplibregl.Marker({ element: el, anchor, offset: anchor === "left" ? [12, 0] : anchor === "top" ? [0, 10] : [0, -10] })
+    .setLngLat(lngLat).addTo(map);
+  requestAnimationFrame(() => el.classList.add("show"));
+  routeTags.push(m);
+}
+function nearestOnRoute(route, pt) {
+  let best = null;
+  for (let i = 0; i < route.length - 1; i++) {
+    const [ax, ay] = route[i], [bx, by] = route[i + 1];
+    let px = pt[0]; if (Math.max(ax, bx) > 180 && px < 0) px += 360; // 日付変更線をまたぐ線
+    const dx = bx - ax, dy = by - ay;
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pt[1] - ay) * dy) / (dx * dx + dy * dy)));
+    const q = [ax + t * dx, ay + t * dy], d = Math.hypot(q[0] - px, q[1] - pt[1]);
+    if (!best || d < best.d) best = { q, d, end: (t === 0 && i === 0) || (t === 1 && i === route.length - 2) };
+  }
+  return best;
+}
+function setRouteTags(f) {
+  routeTags.forEach(m => m.remove()); routeTags = [];
+  if (!f || !f.route) return;
+  const color = catOf(f).hot;
+  const near = nearestOnRoute(f.route, [f.lng, f.lat]);
+  f.route.forEach((pt, i) => {
+    const name = f.routeNames && f.routeNames[i];
+    if (!name) return;
+    // 現場が線の端なら、端のラベルに説明も添える
+    const isNearEnd = near.end && Math.hypot(pt[0] - near.q[0], pt[1] - near.q[1]) < 1e-6;
+    routeTag(pt, isNearEnd ? `${name} ┄ ${f.routeLabel}` : name, "end", color, i === 0 ? "top" : "bottom"); // 出発地は点の下、他は上（近い2点が重ならないように）
+  });
+  if (!near.end) routeTag(near.q, `${f.routeLabel}（${f.routeNames[0].replace(/（.*/, "")} → ${f.routeNames.at(-1).replace(/（.*/, "")}）`, "mid", color, "left");
+}
+
+function setArea(f) {
+  setRouteTags(f);
+  const src = map.getSource("area");
+  if (!src) return;
+  const features = [];
+  if (f && f.area) features.push({ type: "Feature", geometry: { type: "Polygon", coordinates: [f.area] } });
+  if (f && f.route) features.push({ type: "Feature", geometry: { type: "LineString", coordinates: f.route } });
+  if (f) {
+    map.setPaintProperty("area-fill", "fill-color", catOf(f).hot);
+    map.setPaintProperty("area-line", "line-color", catOf(f).hot);
+  }
+  src.setData({ type: "FeatureCollection", features });
+}
+function showCaption(f) {
+  const c = $("caption");
+  if (!f) { c.classList.remove("show"); return; }
+  c.querySelector(".t").textContent = f.place;
+  c.querySelector(".s").textContent = `${f.occurred} ／ ${f.stamp}`;
+  c.classList.add("show");
+}
+
+function focusFile(id) {
+  if (current === id && !played) return;
+  played = false; homeAfterPlay = false;
+  current = id; seq++;
+  const f = FILES.find(x => x.id === id);
+  spinning = false; map.stop();
+  markActive(id); setArea(f); // 範囲・ルートは地球儀の段階から見せる
+  showCaption(null); showReticle(null);
+  $("veil").classList.remove("on");
+  { const vis = FILES.filter(FILTERS.find(x => x.key === filter).test); setCount((vis.indexOf(f) + 1) || 1); }
+  setHud(f);
+
+  // ① 地球儀の高さで現場が正面に来るまで回す → ② まっすぐ降下
+  //   （flyTo + minZoom は条件によって NaN を出して地図が止まるため、easeTo の2段階にしている）
+  const target = { center: [f.lng, f.lat], zoom: f.zoom - (isMobile() ? 1 : 0), pitch: f.pitch, bearing: f.bearing,
+    padding: detailPadding() }; // 詳細パネルの分だけ現場をずらす（PC：左へ／スマホ：上へ）
+  const turn = reduceMotion ? 0 : T.flyIn * 0.42, dive = reduceMotion ? 0 : T.flyIn - turn;
+  safeMove("easeTo", { center: target.center, zoom: homeZoom(), pitch: 0, bearing: 0,
+    padding: { right: 0, left: 0, top: 0, bottom: 0 }, duration: turn, easing: t => 1 - Math.pow(1 - t, 3) });
+  later(turn, () => safeMove("easeTo", { ...target, duration: dive,
+    easing: t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2 }));
+  // 着地確認：何かの理由で動かなかったら直接合わせる
+  later(T.flyIn + 300, () => {
+    const c = map.getCenter();
+    if (Math.abs(c.lat - f.lat) + Math.abs(c.lng - f.lng) > 0.05) safeMove("jumpTo", target);
+  });
+  later(T.flyIn * 0.72, () => showReticle(f));
+  later(T.flyIn * 0.82, () => showCaption(f));
+  later(T.flyIn * 0.92, () => showDetail(f));
+
+  // ② 現場でひと呼吸 → ③ 暗転しながら地球儀へ
+  //    調書の上にカーソルがある間は読み終わるまで待つ（離れてから少しして戻る）
+  later(T.flyIn + T.hold, function flyOut() {
+    if (readingDetail()) { later(1000, flyOut); return; }
+    showCaption(null); showReticle(null);
+    $("veil").classList.add("on");
+    safeMove("easeTo", {
+      center: [f.lng, Math.max(-25, Math.min(35, f.lat))], zoom: homeZoom(), pitch: 0, bearing: 0,
+      padding: { right: 0, left: 0, top: 0, bottom: 0 }, duration: reduceMotion ? 0 : T.flyOut, easing: t => 1 - Math.pow(1 - t, 3)
+    });
+    later(T.flyOut * 0.45, () => $("veil").classList.remove("on"));
+    later(T.flyOut, () => {
+      played = true;
+      // 一覧から外れていたら、そのまま自転に戻る
+      if (homeAfterPlay && !filesEl.matches(":hover")) goHome();
+    });
+  });
+}
+
+function goHome() {
+  if (current === null) return;
+  const wasAt = FILES.find(x => x.id === current);
+  current = null; seq++;
+  markActive(null); setArea(null); showCaption(null); showReticle(null);
+  setCount();
+  $("hudPlace").textContent = "世界の未解決ファイル";
+  $("hudMeta").textContent = `FILES ON RECORD : ${pad(FILES.length)}`;
+  typeText($("hudCoord"), "— — —");
+
+  const zoomedIn = map.getZoom() > homeZoom() + 0.5;
+  if (zoomedIn) $("veil").classList.add("on");
+  map.stop();
+  safeMove("easeTo", {
+    center: [map.getCenter().lng, Math.max(-25, Math.min(35, wasAt ? wasAt.lat : 20))],
+    zoom: homeZoom(), pitch: 0, bearing: 0, padding: { right: 0, left: 0, top: 0, bottom: 0 },
+    duration: reduceMotion ? 0 : (zoomedIn ? T.flyOut : 1200),
+    easing: t => 1 - Math.pow(1 - t, 3)
+  });
+  later(zoomedIn ? T.flyOut * 0.45 : 0, () => $("veil").classList.remove("on"));
+  later(reduceMotion ? 0 : (zoomedIn ? T.flyOut : 1200) + 50, () => { spinning = !reduceMotion; spin(); });
+}
+
+/* カメラ操作の安全装置：例外や NaN で地図が止まったら地球儀表示に戻す */
+function recoverMap() {
+  try { map.stop(); } catch (e) {}
+  try { map.jumpTo({ center: [0, 20], zoom: homeZoom(), pitch: 0, bearing: 0 }); } catch (e) {}
+}
+function safeMove(kind, opts) {
+  try {
+    map[kind]({ ...opts, essential: true });
+  } catch (e) {
+    console.warn("カメラ移動に失敗、復旧します:", e);
+    recoverMap();
+    try { map.jumpTo({ center: opts.center, zoom: opts.zoom, pitch: opts.pitch || 0, bearing: opts.bearing || 0 }); } catch (e2) {}
+  }
+}
+setInterval(() => {
+  const c = map.getCenter();
+  if (!isFinite(map.getZoom()) || !isFinite(c.lat) || !isFinite(c.lng)) { console.warn("地図の状態が壊れたので復旧"); recoverMap(); }
+}, 1000);
+
+/* HUD：座標をタイプライター風に表示 */
+function fmt(lat, lng) {
+  return `${lat >= 0 ? "N" : "S"} ${Math.abs(lat).toFixed(4)}°  ${lng >= 0 ? "E" : "W"} ${Math.abs(lng).toFixed(4)}°`;
+}
+function setHud(f) {
+  $("hudPlace").textContent = `現場 ── ${f.place}`;
+  $("hudMeta").textContent = `STATUS : ${f.stamp}`;
+  typeText($("hudCoord"), fmt(f.lat, f.lng));
+}
+let typeTimer;
+function typeText(el, text) {
+  clearInterval(typeTimer);
+  if (reduceMotion) { el.textContent = text; return; }
+  let i = 0; el.textContent = "";
+  typeTimer = setInterval(() => { el.textContent = text.slice(0, ++i); if (i >= text.length) clearInterval(typeTimer); }, 35);
+}
+
+</script>
+</body>
+</html>
