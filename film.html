@@ -69,8 +69,8 @@
 
   /* ③ 事実（ファイルのラベル風）。TikTok等のボタンと重ならないよう、下20%・右15%を避ける */
   /* 事実の札：同じ場所に1枚ずつ。左から滑り込み → 右へ滑り去り → 次の札が入る */
-  #facts { top: auto; bottom: 22%; left: 7%; right: 16%; height: calc(var(--u) * 22); opacity: 1; overflow: visible; }
-  .fact { position: absolute; left: 0; right: 0; bottom: 0;
+  #facts { top: auto; bottom: 22%; left: 11%; right: 11%; height: calc(var(--u) * 22); opacity: 1; overflow: visible; }   /* 左右対称で真ん中に */
+  .fact { position: absolute; left: 0; right: 0; bottom: 0; text-align: center;
           background: var(--paper); color: var(--paper-ink); padding: calc(var(--u) * 2.6) calc(var(--u) * 3.6);
           font-size: calc(var(--u) * 4.4); font-weight: 900; line-height: 1.5; letter-spacing: .04em;
           box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 6) rgba(0,0,0,.6), calc(var(--u) * -.9) 0 0 var(--red);
