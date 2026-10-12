@@ -290,8 +290,24 @@ document.getElementById("again").addEventListener("click", () => location.reload
 const Sound = (() => {
   let ctx = null, master, rev, on = true;
   const midi = m => 440 * Math.pow(2, (m - 69) / 12);
+  /* iPhone はマナーモード（消音スイッチ）だとブラウザの合成音が鳴らない。
+     「再生用の音」として扱わせる：新しい Safari は audioSession、古い Safari は無音の audio 要素を流して切り替える */
+  let unlockEl = null;
+  function iosPlaybackMode() {
+    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+    if (unlockEl) return;
+    const sr = 8000, n = sr / 2, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);   // 0.5秒の無音 WAV
+    const w = (o, str) => [...str].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); w(8, "WAVE"); w(12, "fmt "); v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true);
+    v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, "data"); v.setUint32(40, n * 2, true);
+    unlockEl = new Audio(URL.createObjectURL(new Blob([buf], { type: "audio/wav" })));
+    unlockEl.loop = true; unlockEl.setAttribute("playsinline", "");
+    unlockEl.play().catch(() => {});
+  }
   function prime() {
     if (!on) return;
+    iosPlaybackMode();
     if (!ctx) {
       ctx = new (window.AudioContext || window.webkitAudioContext)();
       master = ctx.createGain(); master.gain.value = .9;
