@@ -313,6 +313,9 @@ document.getElementById("go").addEventListener("click", () => {
 });
 document.getElementById("again").addEventListener("click", () => location.reload());
 
+/* 珠が3つそろってから扉が開くまでの「溜め」（秒）。2.0秒以降の映像と音は、すべてこの分だけ後ろにずれる */
+const HOLD = .9;
+
 /* ===== 音（効果音・BGM） =====
    音の素材ファイルは使わず、ブラウザの Web Audio でその場で合成する（著作権の心配なし）。
    すべて本編の開始時刻 a0 からの秒数で予約するので、映像の動きとずれない。 */
@@ -403,6 +406,16 @@ const Sound = (() => {
     latch(t) { thump(t, 90, .9, .35); noiseHit(t, "bandpass", 700, 1.2, .6, .18); noiseHit(t + .09, "bandpass", 1500, 3, .25, .08); },
     shimmer(t) { [2093, 2637, 3136].forEach((f, i) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = f; env(g, t + i * .06, .3, .022, 1.6); o.connect(g); out(g, .4, 1); o.start(t); o.stop(t + 2.3); }); },
     tick(t) { noiseHit(t, "highpass", 3200, 1, .18, .025); thump(t, 900, .05, .03); },        // ダイヤルのカチッ
+    rise(t, dur) {
+      const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
+      o.type = "sawtooth"; o2.type = "sine";
+      o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(150, t + dur);
+      o2.frequency.setValueAtTime(140, t); o2.frequency.exponentialRampToValueAtTime(440, t + dur);
+      lp.type = "lowpass"; lp.frequency.setValueAtTime(200, t); lp.frequency.exponentialRampToValueAtTime(1800, t + dur);
+      g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.22, t + dur * .9); g.gain.exponentialRampToValueAtTime(.0001, t + dur + .25);
+      o.connect(lp); o2.connect(lp); lp.connect(g); out(g, .9, .8);
+      o.start(t); o2.start(t); o.stop(t + dur + .3); o2.stop(t + dur + .3);
+    },
     seat(t) {                                                                               // 珠がはまる（澄んだキン＋重いコトッ）
       thump(t, 170, .55, .16);
       [1568, 2349, 3136].forEach((f, i) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = f; env(g, t, .002, [.12, .06, .03][i], .9); o.connect(g); out(g, .7, 1); o.start(t); o.stop(t + 1); });
@@ -438,35 +451,36 @@ const Sound = (() => {
     /* 本編の開始時に呼ぶ。台本の秒数どおりに BGM と効果音を予約する */
     schedule(long) {
       if (!on || !ctx) return;
-      const a = ctx.currentTime + .05;
+      const a = ctx.currentTime + .05, b = a + HOLD;   // a：冒頭（〜2秒）の基準、b：扉が開いて以降の基準
       const intro = () => {
         for (let k = .3; k < 1.55; k += .09 + Math.random() * .05) SE.tick(a + k);   // ダイヤルが回るカチカチ
         [1.2, 1.4, 1.6].forEach(sec => SE.clunk(a + sec));                           // ダイヤルが1つずつそろう
         [1.42, 1.62, 1.82].forEach(sec => SE.seat(a + sec));                         // 珠が受け口にはまる
         SE.latch(a + 1.85);                                                          // 3つそろって封印が解け、ボルトが外れる
-        SE.shimmer(a + 2.0); SE.slide(a + 2.2); SE.lock(a + 7.9);
+        SE.rise(a + 1.9, HOLD + .3);                                                 // 溜め：低い音が高まっていく
+        SE.shimmer(b + 2.0); SE.slide(b + 2.2); SE.lock(b + 7.9);
       };
       const fade = end => { master.gain.setValueAtTime(.9, end - 2.5); master.gain.linearRampToValueAtTime(.0001, end); };
       if (!long) {                                   // 約25秒
-        drone(a, 27);
-        pad(a + 2.2, [57, 60, 64], 7.4, .055); pad(a + 9.2, [53, 57, 60], 6.0, .05);
-        pad(a + 14.8, [52, 55, 59], 5.6, .05); pad(a + 20.0, [57, 60, 64], 6.5, .045);
-        [[8.2, 76], [9.4, 72], [11.0, 74], [12.6, 71], [14.2, 72], [16.0, 69], [17.6, 67], [19.2, 64], [21.0, 69]].forEach(([sec, m]) => pluck(a + sec, m, .08));
-        intro(); [9.0, 12.5, 16.0].forEach(sec => SE.paper(a + sec));
-        SE.stamp(a + 20.75); SE.boom(a + 23.5); fade(a + 27);
+        drone(a, 27 + HOLD);
+        pad(b + 2.2, [57, 60, 64], 7.4, .055); pad(b + 9.2, [53, 57, 60], 6.0, .05);
+        pad(b + 14.8, [52, 55, 59], 5.6, .05); pad(b + 20.0, [57, 60, 64], 6.5, .045);
+        [[8.2, 76], [9.4, 72], [11.0, 74], [12.6, 71], [14.2, 72], [16.0, 69], [17.6, 67], [19.2, 64], [21.0, 69]].forEach(([sec, m]) => pluck(b + sec, m, .08));
+        intro(); [9.0, 12.5, 16.0].forEach(sec => SE.paper(b + sec));
+        SE.stamp(b + 20.75); SE.boom(b + 23.5); fade(b + 27);
         return;
       }
-      drone(a, 61.5);                                 // 約60秒
+      drone(a, 61.5 + HOLD);                          // 約60秒
       [[2.2, [57, 60, 64]], [9.2, [53, 57, 60]], [16.2, [52, 55, 59]], [23.2, [57, 60, 64]], [30.2, [50, 53, 57]],
-       [37.2, [53, 57, 60]], [44.2, [52, 55, 59]], [51.2, [57, 60, 64]]].forEach(([sec, n]) => pad(a + sec, n, 7.6, .05));
+       [37.2, [53, 57, 60]], [44.2, [52, 55, 59]], [51.2, [57, 60, 64]]].forEach(([sec, n]) => pad(b + sec, n, 7.6, .05));
       const mel = [76, 72, 74, 71, 72, 69, 67, 64, 69, 71, 72, 74, 76, 72, 69, 67, 64, 62, 64, 69];
-      mel.forEach((m, i) => pluck(a + 8.2 + i * 2.1, m, .07));
+      mel.forEach((m, i) => pluck(b + 8.2 + i * 2.1, m, .07));
       intro();
-      [9.2, 11.6, 14.0, 16.4, 18.8, 21.2].forEach(sec => SE.paper(a + sec));     // 年表
-      SE.paper(a + 24.6);                                                          // 写真
-      [32.0, 36.6, 41.2].forEach(sec => { SE.paper(a + sec); SE.stamp(a + sec + .55); });  // 3つの説と判子
-      SE.shimmer(a + 45.0);                                                        // ひとこと
-      SE.stamp(a + 51.25); SE.boom(a + 56.5); fade(a + 61);
+      [9.2, 11.6, 14.0, 16.4, 18.8, 21.2].forEach(sec => SE.paper(b + sec));     // 年表
+      SE.paper(b + 24.6);                                                          // 写真
+      [32.0, 36.6, 41.2].forEach(sec => { SE.paper(b + sec); SE.stamp(b + sec + .55); });  // 3つの説と判子
+      SE.shimmer(b + 45.0);                                                        // ひとこと
+      SE.stamp(b + 51.25); SE.boom(b + 56.5); fade(b + 61);
     },
   };
 })();
@@ -533,6 +547,7 @@ const Intro = (() => {
           <circle class="emblem" cx="${C.x}" cy="${C.y}" r="15" fill="none" stroke="${PA}" stroke-width="2"/>
         </g>
         <circle class="pulse" cx="${C.x}" cy="${C.y}" r="60" fill="none" stroke="${GO}" stroke-width="5" opacity="0" filter="url(#glow)"/>
+        <circle class="pulse2" cx="${C.x}" cy="${C.y}" r="60" fill="none" stroke="${RD}" stroke-width="3" opacity="0" filter="url(#glow)"/>
         ${orbs}
         ${marker(472, GO)}
       </g>`;
@@ -558,7 +573,7 @@ const Intro = (() => {
       <rect id="flash" width="1000" height="1778" fill="url(#flashG)" opacity="0"/>`;
     const q = sel => svg.querySelector(sel), qa = sel => [...svg.querySelectorAll(sel)];
     els = { draws: qa("#vArt .draw"), A: q(".dialA"), B: q(".dialB"), Cc: q(".dialC"), T: q(".dialT"), bolts: qa(".bolt"), core: q(".core"), mk: qa("#vArt .mk"), orbs: qa("#vArt .orb"), srings: qa("#vArt .sring"),
-            tri: q("#vArt .tri"), emblem: q("#vArt .emblem"), pulse: q("#vArt .pulse"),
+            tri: q("#vArt .tri"), emblem: q("#vArt .emblem"), pulse: q("#vArt .pulse"), pulse2: q("#vArt .pulse2"),
             L: q("#halfL"), R: q("#halfR"), cam: q("#cam"), grids: qa(".grid"), edges: qa(".edge"), seam: q("#seam"), flash: q("#flash"),
             hudST: document.getElementById("hudST"), seals: [...document.querySelectorAll("#hudST b")], word: document.getElementById("hudW"),
             hudTL: document.getElementById("hudTL") };
@@ -580,7 +595,7 @@ const Intro = (() => {
   function update(t, dt) {
     const e = els;
     // 方眼と線の描画
-    e.grids.forEach(g => g.setAttribute("opacity", (clamp(t / .7) * .9 * (1 - clamp((t - 2.6) / .6))).toFixed(3)));
+    e.grids.forEach(g => g.setAttribute("opacity", (clamp(t / .7) * .9 * (1 - clamp((t - 2.6 - HOLD) / .6))).toFixed(3)));
     e.draws.forEach((d, i) => d.setAttribute("stroke-dashoffset", (1 - outC(clamp((t - .05 - i * .1) / .85))).toFixed(4)));
     // 3つのダイヤル：別々に回って、1.2／1.4／1.6秒で頂点にそろう
     const dial = (start, dur, from) => from * (1 - backOut(clamp((t - start) / dur)));
@@ -611,22 +626,26 @@ const Intro = (() => {
     e.emblem.setAttribute("fill", t >= UNSEAL ? RD : "none"); e.emblem.setAttribute("filter", t >= UNSEAL ? "url(#glow)" : "");
     const pq = clamp((t - UNSEAL) / .8);
     e.pulse.setAttribute("r", (60 + 470 * outC(pq)).toFixed(1)); e.pulse.setAttribute("opacity", t >= UNSEAL ? (.9 * (1 - pq)).toFixed(3) : 0);
+    const p2 = clamp((t - UNSEAL - .45) / .8);                                  // 溜め：2回目の光の輪
+    e.pulse2.setAttribute("r", (60 + 470 * outC(p2)).toFixed(1)); e.pulse2.setAttribute("opacity", t >= UNSEAL + .45 ? (.8 * (1 - p2)).toFixed(3) : 0);
+    const beat = t >= UNSEAL && t < 2.2 + HOLD ? .5 + .5 * Math.sin((t - UNSEAL) * 14) : 0;   // 溜め：三角形が脈打つ
+    e.tri.setAttribute("stroke-width", (3 + 3 * beat * clamp((t - UNSEAL) / .3)).toFixed(2));
     // 封印の表示（珠がはまるたびに点灯）
     SEAT.forEach((s2, i) => e.seals[i].classList.toggle("on", t >= s2));
     e.word.textContent = t >= UNSEAL ? "UNSEALED" : "LOCKED"; e.hudST.classList.toggle("open", t >= UNSEAL);
-    e.hudST.style.opacity = (clamp((t - .5) / .4) * (1 - clamp((t - 2.15) / .35))).toFixed(3);
-    e.hudTL.textContent = hudText(t); e.hudTL.style.opacity = (1 - clamp((t - 2.15) / .35)) * .8;
+    e.hudST.style.opacity = (clamp((t - .5) / .4) * (1 - clamp((t - 2.15 - HOLD) / .35))).toFixed(3);
+    e.hudTL.textContent = hudText(t); e.hudTL.style.opacity = (1 - clamp((t - 2.15 - HOLD) / .35)) * .8;
     // 切れ目の光 → 扉が左右に割れて開く・カメラが寄る
-    e.seam.setAttribute("opacity", (clamp((t - 1.95) / .25) * (1 - clamp((t - 2.6) / .5))).toFixed(3));
-    e.edges.forEach(g => g.setAttribute("opacity", (clamp((t - 2.05) / .2) * (1 - clamp((t - 3.2) / .4))).toFixed(3)));
-    const op = inOut4(clamp((t - 2.2) / 1.3));
+    e.seam.setAttribute("opacity", (clamp((t - 1.95 - HOLD) / .25) * (1 - clamp((t - 2.6 - HOLD) / .5))).toFixed(3));
+    e.edges.forEach(g => g.setAttribute("opacity", (clamp((t - 2.05 - HOLD) / .2) * (1 - clamp((t - 3.2 - HOLD) / .4))).toFixed(3)));
+    const op = inOut4(clamp((t - 2.2 - HOLD) / 1.3));
     e.L.setAttribute("transform", `translate(${-680 * op} 0)`); e.R.setAttribute("transform", `translate(${680 * op} 0)`);
-    const z = 1 + .16 * outC(clamp((t - 1.7) / 2.2));
+    const z = 1 + .16 * outC(clamp((t - 1.7) / (2.2 + HOLD)));
     e.cam.setAttribute("transform", `translate(${C.x} ${C.y}) scale(${z}) translate(${-C.x} ${-C.y})`);
-    e.flash.setAttribute("opacity", (t < 2.2 ? 0 : Math.max(0, .75 * (1 - (t - 2.2) / .9))).toFixed(3));
+    e.flash.setAttribute("opacity", (t < 2.2 + HOLD ? 0 : Math.max(0, .75 * (1 - (t - 2.2 - HOLD) / .9))).toFixed(3));
     // 引きの一文：ぼかしから1文字ずつ → 開くと舞い上がって消える
     chars.forEach(c => {
-      const a = outC(clamp((t - .25 - c.i * .035) / .55)), ex = clamp((t - 2.15 - c.i * .012) / .8), ee = outC(ex);
+      const a = outC(clamp((t - .25 - c.i * .035) / .55)), ex = clamp((t - 2.15 - HOLD - c.i * .012) / .8), ee = outC(ex);
       c.el.style.opacity = (a * (1 - ex)).toFixed(3);
       c.el.style.filter = `blur(${((1 - a) * 10 + ex * 6).toFixed(1)}px)`;
       c.el.style.transform = `translate(${(c.dx * ee).toFixed(1)}px, ${((1 - a) * 14 + c.dy * ee).toFixed(1)}px) rotate(${(c.rot * ee).toFixed(1)}deg)`;
@@ -636,7 +655,7 @@ const Intro = (() => {
     const dpr = devicePixelRatio || 1, W = Math.round(cv.clientWidth * dpr), H = Math.round(cv.clientHeight * dpr);
     if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }   // 大きさが変わった時だけ作り直す
     ctx.clearRect(0, 0, W, H);
-    const burst = clamp((t - 2.2) / .2), fadeAll = 1 - clamp((t - 3.1) / .5);
+    const burst = clamp((t - 2.2 - HOLD) / .2), fadeAll = 1 - clamp((t - 3.1 - HOLD) / .5);
     dust.forEach(d => {
       if (burst > 0) { const dx = d.x - .5, dy = d.y - .45, l = Math.hypot(dx, dy) || 1; d.vx += dx / l * .02 * burst * dt * 60; d.vy += dy / l * .02 * burst * dt * 60; }
       d.x += d.vx * dt; d.y += d.vy * dt; if (d.y < -.02) d.y = 1.02;
@@ -653,7 +672,7 @@ const Intro = (() => {
       const tick = now => {
         const t = (now - t0) / 1000, dt = Math.min(.05, Math.max(0, t - last)); last = t;
         update(t, dt);
-        if (t < 3.8) raf = requestAnimationFrame(tick); else box.classList.add("done");
+        if (t < 3.8 + HOLD) raf = requestAnimationFrame(tick); else box.classList.add("done");
       };
       raf = requestAnimationFrame(tick);
     },
@@ -685,7 +704,8 @@ async function play() {
     $("musing").querySelector("p").textContent = L.musing;
   }
   Sound.schedule(!!L);   // 音は映像と同じ開始時刻から、台本の秒数どおりに鳴る
-  const t0 = performance.now(); const at = ms => wait(Math.max(0, ms - (performance.now() - t0)));
+  const t0 = performance.now();
+  const at = ms => wait(Math.max(0, ms + (ms >= 2000 ? HOLD * 1000 : 0) - (performance.now() - t0)));   // 扉が開いて以降は溜めの分ずらす
 
   // 0〜3.8s 冒頭：封印された金庫扉（Intro が1コマごとに描く）
   Intro.start(t0);
