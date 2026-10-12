@@ -107,6 +107,46 @@
   .fact.on { opacity: 1; transform: rotate(-.6deg); }
   .fact small { display: block; font-family: "Special Elite", monospace; font-weight: 400; font-size: calc(var(--u) * 2.4); letter-spacing: .12em; opacity: .6; }
 
+  /* 60秒版：年表（下から積み重なる） */
+  #tl { top: auto; bottom: 22%; left: 7%; right: 16%; height: auto; display: flex; flex-direction: column; gap: calc(var(--u) * 1.6); opacity: 1; }
+  .tl { display: flex; gap: calc(var(--u) * 3); align-items: baseline; background: rgba(7,9,12,.78); border-left: calc(var(--u) * .8) solid var(--accent);
+        padding: calc(var(--u) * 1.8) calc(var(--u) * 3); font-size: calc(var(--u) * 3.9); font-weight: 900; line-height: 1.45;
+        opacity: 0; transform: translateY(calc(var(--u) * 4)); transition: opacity .5s ease, transform .7s cubic-bezier(.2,.9,.25,1.1); }
+  .tl.on { opacity: 1; transform: none; }
+  .tl.dead { border-left-color: var(--hot); }
+  .tl.dead .t { color: #ffb4a8; }
+  .tl .y { flex: none; font-family: "Special Elite", monospace; font-weight: 400; font-size: calc(var(--u) * 3.2); color: var(--accent); }
+  .tl.dead .y { color: var(--hot); }
+  .tl.gone { opacity: 0; transform: translateY(calc(var(--u) * -3)); }
+
+  /* 60秒版：古い写真 */
+  #photo { display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.6); z-index: 6; }
+  .print { width: 84%; background: #e9e1cf; padding: calc(var(--u) * 2.4) calc(var(--u) * 2.4) calc(var(--u) * 6); transform: rotate(-2deg) scale(.96);
+           box-shadow: 0 calc(var(--u) * 3) calc(var(--u) * 10) rgba(0,0,0,.8); transition: transform 6s ease-out; }
+  #photo.on .print { transform: rotate(-1deg) scale(1.02); }
+  .print img { display: block; width: 100%; filter: sepia(.35) contrast(1.05); }
+  .print .cap { margin-top: calc(var(--u) * 2.4); color: var(--paper-ink); font-size: calc(var(--u) * 3.8); font-weight: 900; text-align: center; }
+  .print .cr { margin-top: calc(var(--u) * 1); color: #6e6455; font-size: calc(var(--u) * 2.2); text-align: center; line-height: 1.5; }
+
+  /* 60秒版：考察（3つの説） */
+  #hypos { background: rgba(0,0,0,.66); z-index: 6; display: flex; flex-direction: column; justify-content: center; gap: calc(var(--u) * 3.4); padding: 0 8% 0 8%; }
+  #hypos .hd { font-family: "Special Elite", monospace; font-size: calc(var(--u) * 3); letter-spacing: .3em; color: var(--accent); text-align: center; margin-bottom: calc(var(--u) * 1); }
+  .hy { position: relative; background: var(--paper); color: var(--paper-ink); padding: calc(var(--u) * 3) calc(var(--u) * 4);
+        box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 6) rgba(0,0,0,.6); opacity: 0; transform: translateX(calc(var(--u) * 10)) rotate(1deg);
+        transition: opacity .5s ease, transform .7s cubic-bezier(.2,.9,.25,1.1); }
+  .hy.on { opacity: 1; transform: rotate(-.6deg); }
+  .hy h3 { margin: 0 0 calc(var(--u) * 1); font-size: calc(var(--u) * 4.8); font-weight: 900; }
+  .hy p { margin: 0; font-size: calc(var(--u) * 3.3); line-height: 1.6; font-weight: 600; opacity: .8; }
+  .hy .lv { position: absolute; right: calc(var(--u) * 3); top: calc(var(--u) * 2.6); font-size: calc(var(--u) * 3); font-weight: 900; letter-spacing: .1em;
+            border: calc(var(--u) * .5) solid currentColor; padding: 0 calc(var(--u) * 1.4); transform: rotate(-8deg) scale(2); opacity: 0;
+            transition: transform .3s cubic-bezier(.3,1.6,.5,1) .55s, opacity .15s .55s; }
+  .hy.on .lv { transform: rotate(-8deg); opacity: .9; }
+  .lv.low { color: var(--red); } .lv.mid { color: #8a5a12; } .lv.ok { color: #2f5d3a; }
+
+  /* 60秒版：ひとこと（記事の考察の核心） */
+  #musing { background: rgba(0,0,0,.82); z-index: 6; display: flex; align-items: center; justify-content: center; padding: 0 10%; }
+  #musing p { margin: 0; font-size: calc(var(--u) * 4.5); font-weight: 600; line-height: 1.9; letter-spacing: .06em; text-align: center; white-space: pre-line; }
+
   /* ④ 未解決の問い */
   #question { background: rgba(0,0,0,.78); display: flex; align-items: center; justify-content: center; z-index: 6; }
   .qcard { position: relative; width: 82%; background: var(--paper); color: var(--paper-ink); padding: calc(var(--u) * 7) calc(var(--u) * 6) calc(var(--u) * 6);
@@ -150,6 +190,10 @@
 
   <div class="layer" id="place"><div class="p"></div><div class="s"></div></div>
   <div class="layer" id="facts"></div>
+  <div class="layer" id="tl"></div>
+  <div class="layer" id="photo"><div class="print"><img alt=""><div class="cap"></div><div class="cr"></div></div></div>
+  <div class="layer" id="hypos"><div class="hd">THEORIES ── 3つの説</div></div>
+  <div class="layer" id="musing"><p></p></div>
   <div class="layer" id="question"><div class="qcard"><div class="lb">UNRESOLVED ── 未解決の問い</div><div class="q"></div><span class="stamp"></span><div class="no"></div></div></div>
   <div class="layer" id="outro"><div class="t">開かずの書庫</div><div class="r">AKAZU NO SHOKO</div><div class="c">続きは、プロフィールのリンクから</div></div>
   <div class="layer on" id="intro">
@@ -164,6 +208,7 @@
     <h1>撮影モード</h1>
     <p>縦長 9:16・約25秒。<br>先に画面録画を始めてから「撮影開始」を押してください。<br>この案内は撮影中は表示されません。</p>
     <select id="pick"></select>
+    <select id="len"><option value="25">約25秒（ショート）</option><option value="60">約60秒（長め）※台本がある記事のみ</option></select>
     <label class="snd"><input type="checkbox" id="snd" checked> 音あり（効果音・BGM）</label>
     <button id="go" type="button">撮影開始</button>
   </div>
@@ -182,7 +227,17 @@ const FILMS = {
     hook: "230年掘っても、\n底に届かない穴がある。",
     place: "オーク島", sub: "CANADA ／ N 44.5155° W 64.2995°",
     facts: [["1795", "少年が、地面のくぼみを見つける"], ["DEATHS", "捜索中の事故で、6人が死亡"], ["NOW", "宝は、いまも見つかっていない"]],
-    question: "もし何もなかったとしたら、\n人々は何を掘り続けて\nきたのか。"
+    question: "もし何もなかったとしたら、\n人々は何を掘り続けて\nきたのか。",
+    long: {   // 約60秒版（記事 2026.10.01 の内容から）
+      timeline: [["1795", "少年が、すり鉢状のくぼみを見つける"], ["1803", "90フィートで、記号の刻まれた石板"], ["1861", "ボイラーの爆発で、1人が死亡", 1],
+                 ["1909", "若きルーズベルトが、捜索に加わる"], ["1965", "硫化水素ガスで、4人が死亡", 1], ["2006", "ラジーナ兄弟が、現代の探査を投入"]],
+      photo: { src: "https://upload.wikimedia.org/wikipedia/commons/0/09/Photograph_of_Franklin_D._Roosevelt_and_Others_at_Oak_Island_in_Nova_Scotia_-_NARA_-_196803.jpg",
+               cap: "1909年、オーク島の捜索団", credit: "写真：撮影者不明（米国立公文書記録管理局所蔵）\nWikimedia Commons（Public Domain）" },
+      hypos: [["財宝説", "海賊の金貨、王妃の宝石、聖杯…\n時代ごとに中身が入れ替わる", "根拠薄い", "low"],
+              ["地質学説", "石灰岩が溶けてできた、自然の陥没。\nだが海岸の排水トンネルは説明できない", "議論中", "mid"],
+              ["折衷説", "自然の空洞に、\n後から誰かが手を加えた", "議論中", "mid"]],
+      musing: "人々は、その時代が\n一番欲しがるものを、\nそこに埋め直して\nきたのかもしれない。"
+    }
   },
   tut: {
     title: "ツタンカーメンの呪い", no: "020", stamp: "伝説化",
@@ -228,6 +283,7 @@ dem.setupMaplibre(maplibregl);
 const LINE = "#e9dcbc", BLUE = "#8fb3d9", empty = { type: "FeatureCollection", features: [] };
 const fade = (a, b, x, y) => ["interpolate", ["linear"], ["zoom"], a, x, b, y];
 const params = new URLSearchParams(location.search);
+let lenSel = params.get("len") === "60" ? "60" : "25";
 let film = FILMS[params.get("id")] || FILMS.oak;
 const homeZoom = () => Math.log2(document.getElementById("stage").clientWidth * .82 * Math.PI / 512);
 
@@ -277,6 +333,8 @@ const pick = document.getElementById("pick");
 pick.innerHTML = Object.entries(FILMS).map(([k, f]) => `<option value="${k}">FILE No.${f.no}　${f.title}</option>`).join("");
 pick.value = Object.keys(FILMS).find(k => FILMS[k] === film);
 pick.addEventListener("change", () => { film = FILMS[pick.value]; history.replaceState(null, "", "?id=" + pick.value); });
+document.getElementById("len").value = lenSel;
+document.getElementById("len").addEventListener("change", e => { lenSel = e.target.value; });
 document.getElementById("go").addEventListener("click", () => {
   Sound.setOn(document.getElementById("snd").checked);
   Sound.prime();
@@ -393,19 +451,31 @@ const Sound = (() => {
     setOn(v) { on = v; },
     prime,
     /* 本編の開始時に呼ぶ。台本の秒数どおりに BGM と効果音を予約する */
-    schedule() {
+    schedule(long) {
       if (!on || !ctx) return;
       const a = ctx.currentTime + .05;
-      drone(a, 27);
-      pad(a + 2.2, [57, 60, 64], 7.4, .055);   // Am
-      pad(a + 9.2, [53, 57, 60], 6.0, .05);    // F
-      pad(a + 14.8, [52, 55, 59], 5.6, .05);   // Em
-      pad(a + 20.0, [57, 60, 64], 6.5, .045);  // Am
-      [[8.2, 76], [9.4, 72], [11.0, 74], [12.6, 71], [14.2, 72], [16.0, 69], [17.6, 67], [19.2, 64], [21.0, 69]].forEach(([sec, m]) => pluck(a + sec, m, .08));
-      SE.latch(a + 1.6); SE.shimmer(a + 2.0); SE.creak(a + 2.2); SE.lock(a + 7.9);
-      [9.0, 12.5, 16.0].forEach(sec => SE.paper(a + sec));
-      SE.stamp(a + 20.75); SE.boom(a + 23.5);
-      master.gain.setValueAtTime(.9, a + 24.5); master.gain.linearRampToValueAtTime(.0001, a + 27);
+      const intro = () => { SE.latch(a + 1.6); SE.shimmer(a + 2.0); SE.creak(a + 2.2); SE.lock(a + 7.9); };
+      const fade = end => { master.gain.setValueAtTime(.9, end - 2.5); master.gain.linearRampToValueAtTime(.0001, end); };
+      if (!long) {                                   // 約25秒
+        drone(a, 27);
+        pad(a + 2.2, [57, 60, 64], 7.4, .055); pad(a + 9.2, [53, 57, 60], 6.0, .05);
+        pad(a + 14.8, [52, 55, 59], 5.6, .05); pad(a + 20.0, [57, 60, 64], 6.5, .045);
+        [[8.2, 76], [9.4, 72], [11.0, 74], [12.6, 71], [14.2, 72], [16.0, 69], [17.6, 67], [19.2, 64], [21.0, 69]].forEach(([sec, m]) => pluck(a + sec, m, .08));
+        intro(); [9.0, 12.5, 16.0].forEach(sec => SE.paper(a + sec));
+        SE.stamp(a + 20.75); SE.boom(a + 23.5); fade(a + 27);
+        return;
+      }
+      drone(a, 61.5);                                 // 約60秒
+      [[2.2, [57, 60, 64]], [9.2, [53, 57, 60]], [16.2, [52, 55, 59]], [23.2, [57, 60, 64]], [30.2, [50, 53, 57]],
+       [37.2, [53, 57, 60]], [44.2, [52, 55, 59]], [51.2, [57, 60, 64]]].forEach(([sec, n]) => pad(a + sec, n, 7.6, .05));
+      const mel = [76, 72, 74, 71, 72, 69, 67, 64, 69, 71, 72, 74, 76, 72, 69, 67, 64, 62, 64, 69];
+      mel.forEach((m, i) => pluck(a + 8.2 + i * 2.1, m, .07));
+      intro();
+      [9.2, 11.6, 14.0, 16.4, 18.8, 21.2].forEach(sec => SE.paper(a + sec));     // 年表
+      SE.paper(a + 24.6);                                                          // 写真
+      [32.0, 36.6, 41.2].forEach(sec => { SE.paper(a + sec); SE.stamp(a + sec + .55); });  // 3つの説と判子
+      SE.shimmer(a + 45.0);                                                        // ひとこと
+      SE.stamp(a + 51.25); SE.boom(a + 56.5); fade(a + 61);
     },
   };
 })();
@@ -428,7 +498,18 @@ async function play() {
   $("question").querySelector(".q").textContent = f.question;
   $("question").querySelector(".stamp").textContent = f.stamp;
   $("question").querySelector(".no").textContent = `FILE No.${f.no} ／ ${f.title}`;
-  Sound.schedule();   // 音は映像と同じ開始時刻から、台本の秒数どおりに鳴る
+  const L = lenSel === "60" && f.long ? f.long : null;   // 約60秒版の台本（ない記事は25秒版）
+  if (L) {
+    $("tl").innerHTML = L.timeline.map(([y, t, dead]) => `<div class="tl${dead ? " dead" : ""}"><span class="y">${y}</span><span class="t">${t}</span></div>`).join("");
+    $("photo").querySelector("img").src = L.photo.src;
+    $("photo").querySelector(".cap").textContent = L.photo.cap;
+    $("photo").querySelector(".cr").textContent = L.photo.credit;
+    $("photo").querySelector(".cr").style.whiteSpace = "pre-line";
+    $("hypos").insertAdjacentHTML("beforeend", L.hypos.map(([h, d, lv, c]) =>
+      `<div class="hy"><h3>${h}</h3><p style="white-space:pre-line">${d}</p><span class="lv ${c}">${lv}</span></div>`).join(""));
+    $("musing").querySelector("p").textContent = L.musing;
+  }
+  Sound.schedule(!!L);   // 音は映像と同じ開始時刻から、台本の秒数どおりに鳴る
   const t0 = performance.now(); const at = ms => wait(Math.max(0, ms - (performance.now() - t0)));
 
   // 0.0s 閉ざされた扉に、引きの一文
@@ -444,7 +525,8 @@ async function play() {
   // 7.6s 照準と地名
   await at(7600); $("reticle").classList.add("on"); $("place").classList.add("on");
   // 8.2s 以降、ゆっくり回り込む
-  await at(8200); map.easeTo({ bearing: f.bearing + 35, zoom: f.zoom, duration: 12000, easing: t => t });
+  await at(8200); map.easeTo({ bearing: f.bearing + (L ? 90 : 35), zoom: f.zoom, duration: L ? 42000 : 12000, easing: t => t });
+  if (L) return playLong(f, at);
   // 9.0s / 12.5s / 16.0s 事実
   const facts = $("facts").children;
   await at(9000);  facts[0].classList.add("on");
@@ -456,6 +538,33 @@ async function play() {
   await at(23500); $("outro").classList.add("on");
   // 26.5s 終了
   await at(26500); $("again").style.display = "block";
+}
+
+/* 約60秒版の後半：年表 → 古い写真 → 3つの説 → ひとこと → 問い → ロゴ */
+async function playLong(f, at) {
+  const rows = [...$("tl").children];
+  // 9.2s〜 年表を2.4秒ごとに積み上げる（4件を超えたら古いものから消す）
+  for (let i = 0; i < rows.length; i++) {
+    await at(9200 + i * 2400); rows[i].classList.add("on");
+    if (i >= 4) rows[i - 4].classList.add("gone"), setTimeout(() => rows[i - 4].style.display = "none", 600);
+  }
+  await at(23800); $("tl").style.opacity = 0; $("place").classList.remove("on");
+  // 24.6s 古い写真
+  await at(24600); $("photo").classList.add("on");
+  await at(30400); $("photo").classList.remove("on");
+  // 31s〜 3つの説（判子つき）
+  await at(31000); $("hypos").classList.add("on");
+  const hy = $("hypos").querySelectorAll(".hy");
+  await at(32000); hy[0].classList.add("on");
+  await at(36600); hy[1].classList.add("on");
+  await at(41200); hy[2].classList.add("on");
+  // 45s ひとこと
+  await at(45000); $("hypos").classList.remove("on"); $("musing").classList.add("on");
+  // 50.5s 未解決の問い
+  await at(50500); $("musing").classList.remove("on"); $("question").classList.add("on");
+  // 56.5s ロゴ
+  await at(56500); $("outro").classList.add("on");
+  await at(60000); $("again").style.display = "block";
 }
 
 if (params.has("auto")) { document.getElementById("start").style.display = "none"; play(); }
