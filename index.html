@@ -77,7 +77,8 @@ addEventListener("unhandledrejection", function (e) { dbg("REJ " + String(e.reas
   .globe-wrap.with-detail .brand { opacity: 0; transform: translateY(-10px); filter: blur(4px); }
   .brand h1 { margin: 0; font-weight: 900; font-size: 26px; letter-spacing: .3em; }
   .brand p { margin: 6px 0 0; font-size: 12px; color: var(--ink-dim); letter-spacing: .25em; }
-  .brand rt { font-size: .38em; font-weight: 600; letter-spacing: 0; color: var(--ink-dim); }
+  /* 読み方の補足（ヘボン式）。古い書庫のラベル風に */
+  .brand .romaji { margin-top: 5px; font-family: "Special Elite", monospace; font-size: 10.5px; letter-spacing: .42em; color: var(--accent); opacity: .85; }
 
   .hud {
     position: absolute; left: 32px; bottom: 32px; z-index: 5; pointer-events: none;
@@ -329,7 +330,8 @@ addEventListener("unhandledrejection", function (e) { dbg("REJ " + String(e.reas
     <div class="caption" id="caption"><div class="t"></div><div class="s"></div></div>
     <aside class="detail" id="detail" aria-live="polite"></aside>
     <div class="brand">
-      <h1><ruby>開<rt>あ</rt></ruby>かずの書庫</h1>
+      <h1>開かずの書庫</h1>
+      <div class="romaji">AKAZU NO SHOKO</div>
       <p>今夜だけ、鍵を開けます。</p>
     </div>
     <div class="hud" aria-live="polite">
