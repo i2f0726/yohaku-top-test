@@ -604,27 +604,65 @@ fetch("https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json")
   })
   .catch(e => console.warn("海岸線データの読み込み失敗:", e));
 
-map.scrollZoom.disable();
+/* --- 操作：ドラッグで回す／ホイール・ピンチでズーム（傾きと方位の回転は固定） --- */
 map.dragRotate.disable();
 map.touchZoomRotate.disableRotation();
+map.touchPitch.disable();
+map.setMaxZoom(18);
 
 /* --- ゆっくり自転 --- */
 let spinning = !reduceMotion, dragging = false;
+let userHold = false, holdTimer, userZoomed = false; // 触っている間（＋離して3秒）は自転を止める
 function spin() {
-  if (!spinning || dragging) return;
+  if (!spinning || dragging || userHold || current !== null) return;
   const c = map.getCenter(); c.lng -= 2.2;
   map.easeTo({ center: c, duration: 1000, easing: t => t });
 }
-// ドラッグ中だけ止める（mousedown/touchstart で止めると、離した合図を取りこぼした時に止まったままになる）
-map.on("dragstart", () => { dragging = true; });
-map.on("dragend", () => { dragging = false; spin(); });
-addEventListener("pointerup", () => { if (dragging) { dragging = false; spin(); } });
-// 見張り：地球儀表示で止まっていたら自転を再開
+// 描画処理の最中に地図を動かすと固まることがあるため、次のタイミングで実行する
+const deferSpin = () => setTimeout(spin, 0);
+function holdSpin() { // 離した合図を取りこぼしても15秒で自転に戻す保険付き
+  userHold = true; clearTimeout(holdTimer);
+  holdTimer = setTimeout(() => { userHold = false; dragging = false; spin(); }, 15000);
+}
+function releaseSpin() { clearTimeout(holdTimer); holdTimer = setTimeout(() => { userHold = false; spin(); }, 3000); }
+const byUser = e => !!(e && e.originalEvent);
+map.on("dragstart", () => { dragging = true; holdSpin(); if (current === null) clearTimeout(timer); }); // ピンの待ち時間中にドラッグしたら取り消す
+let lastDragEnd = 0;
+map.on("dragend", () => { dragging = false; lastDragEnd = performance.now(); releaseSpin(); });
+map.on("zoomstart", e => { if (byUser(e)) holdSpin(); });
+map.on("zoomend", e => { if (byUser(e)) { userZoomed = true; releaseSpin(); } });
+// 地球儀に触れた瞬間に自転を止める（自転の動きがドラッグを上書きしないように）
+const mapBox = map.getCanvasContainer();
+mapBox.addEventListener("pointerdown", () => { if (current === null) map.stop(); holdSpin(); }); // 現場へ移動中は止めない
+mapBox.addEventListener("wheel", () => { if (current === null) map.stop(); holdSpin(); releaseSpin(); }, { passive: true });
+const onRelease = () => { if (userHold) { dragging = false; releaseSpin(); } };
+addEventListener("pointerup", onRelease);
+addEventListener("pointercancel", onRelease);
+map.on("moveend", deferSpin);
+// 画面サイズが変わったら地球儀の大きさを合わせ直す（自分でズームした後は触らない）
+map.on("resize", () => setTimeout(() => {
+  if (current === null && !userZoomed && !userHold) map.jumpTo({ zoom: homeZoom() });
+}, 0));
+
+/* --- 安全装置 ---
+   ① 見張り：地球儀表示で止まっていたら自転を再開（動いているはずなのに位置が変わらない時も立て直す）
+   ② 地図の描画処理が例外で止まったら（MapLibre の "Attempting to run()..."）復帰させる */
+let lastLng = null, stuck = 0;
 setInterval(() => {
-  if (current === null && spinning && !map.isMoving()) { dragging = false; spin(); }
+  if (current !== null || !spinning || userHold) { stuck = 0; return; }
+  const lng = map.getCenter().lng;
+  stuck = (lastLng !== null && Math.abs(lng - lastLng) < 1e-6) ? stuck + 1 : 0;
+  lastLng = lng;
+  if (!map.isMoving() || stuck >= 2) { dragging = false; try { map.stop(); } catch (e) {} spin(); }
 }, 1500);
-map.on("moveend", spin);
-map.on("resize", () => { if (current === null) map.jumpTo({ zoom: homeZoom() }); });
+addEventListener("error", e => {
+  const msg = String(e.message || "");
+  if (msg.includes("Attempting to run(), but is already running")) {
+    try { if (map._renderTaskQueue) map._renderTaskQueue._currentlyRunning = false; map.triggerRepaint(); } catch (err) {}
+  } else if (/maplibre/.test(e.filename || "")) {
+    console.warn("地図の描画で例外（固まる原因の候補）:", e.error || msg);
+  }
+});
 
 /* --- レーダー＆照準（ピンより先に追加して下に敷く） --- */
 const reticleEl = document.createElement("div");
@@ -745,8 +783,9 @@ FILES.forEach(f => {
   const el = document.createElement("div");
   el.className = "pin cat-" + catOf(f).key + (f.region === "jp" ? " jp" : ""); el.innerHTML = "<i></i>"; el.title = f.title;
   // ピン：0.35秒止めたら開始。開始後は地球儀が動いてピンがカーソルから離れても最後まで再生し、終わったら自転へ戻る
-  el.addEventListener("mouseenter", () => {
+  el.addEventListener("mouseenter", e => {
     if (!userMoved()) return; // 地球儀が動いてピンがカーソルの下に来ただけなら無視
+    if (e.buttons || dragging || performance.now() - lastDragEnd < 800) return; // ドラッグ中・直後は無視
     clearTimeout(timer);
     timer = setTimeout(() => { focusFile(f.id); homeAfterPlay = true; }, 350);
   });
@@ -924,7 +963,7 @@ function showCaption(f) {
 function focusFile(id) {
   if (current === id && !played) return;
   played = false; homeAfterPlay = false;
-  current = id; seq++;
+  current = id; seq++; userZoomed = false; userHold = false; clearTimeout(holdTimer);
   const f = FILES.find(x => x.id === id);
   spinning = false; map.stop();
   markActive(id); setArea(f); // 範囲・ルートは地球儀の段階から見せる
@@ -973,7 +1012,7 @@ function focusFile(id) {
 function goHome() {
   if (current === null) return;
   const wasAt = FILES.find(x => x.id === current);
-  current = null; seq++;
+  current = null; seq++; userZoomed = false;
   markActive(null); setArea(null); showCaption(null); showReticle(null);
   setCount();
   $("hudPlace").textContent = "世界の未解決ファイル";
