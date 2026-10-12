@@ -384,6 +384,28 @@ addEventListener("unhandledrejection", function (e) { dbg("REJ " + String(e.reas
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/maplibre-contour@0.1.0/dist/index.min.js" crossorigin="anonymous"></script>
 <script>
+
+/* 海岸線データの「偽の線」を取り除く。
+   南極大陸は南極点（南緯90°）や日付変更線（経度180°）に沿った縁で閉じられているため、
+   その縁が地球儀の内側を突っ切る直線（明るい弧）として描かれてしまう。
+   日付変更線をまたぐ海岸線（経度が +180→−180 に飛ぶ所）も、地球を1周する直線になるので切る */
+function cleanCoast(geo) {
+  const lines = geo.type === "MultiLineString" ? geo.coordinates : [geo.coordinates];
+  const fake = ([x1, y1], [x2, y2]) =>
+    (Math.abs(y1) > 89 && Math.abs(y2) > 89) ||                                // 極点に沿った縁
+    (Math.abs(x1) > 179.9 && Math.abs(x2) > 179.9 && Math.sign(x1) === Math.sign(x2)) ||  // 日付変更線に沿った縁
+    Math.abs(x2 - x1) > 180;                                                     // 日付変更線をまたぐ所（+180→−180 の飛び。フィジーやロシア東端）
+  const out = [];
+  lines.forEach(line => {
+    let run = [line[0]];
+    for (let i = 1; i < line.length; i++) {
+      if (fake(line[i - 1], line[i])) { if (run.length > 1) out.push(run); run = [line[i]]; }
+      else run.push(line[i]);
+    }
+    if (run.length > 1) out.push(run);
+  });
+  return { type: "MultiLineString", coordinates: out };
+}
 /* ===== 記事データ（WordPress移行後はREST APIから取得する想定） ===== */
 const FILES = [
   // genre: jiken=事件 / kaidan=怪談 / toshi=都市伝説、region: jp=国内 / world=海外
@@ -654,7 +676,7 @@ fetch("https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json")
   .then(w => {
     const set = () => {
       map.getSource("land").setData(topojson.feature(w, w.objects.land));
-      map.getSource("coast").setData(topojson.mesh(w, w.objects.land));
+      map.getSource("coast").setData(cleanCoast(topojson.mesh(w, w.objects.land)));
       map.getSource("borders").setData(topojson.mesh(w, w.objects.countries, (a, b) => a !== b));
     };
     map.isStyleLoaded() ? set() : map.once("load", set);
