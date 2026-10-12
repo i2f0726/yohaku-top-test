@@ -289,6 +289,26 @@ addEventListener("unhandledrejection", function (e) { dbg("REJ " + String(e.reas
   .detail .q { font-size: 12px; font-weight: 600; color: var(--stamp); margin-bottom: 12px; }
   .detail .q::before { content: "── "; }
   .detail a.open { display: block; text-align: right; }
+  /* 関連資料の棚（アフィリエイト。PR 表記は必須） */
+  .detail .card { max-height: 84vh; overflow-y: auto; overscroll-behavior: contain; }
+  .detail .shelf { margin: 4px 0 12px; padding-top: 10px; border-top: 1px dashed rgba(42,36,27,.35); }
+  .detail .shelf .sh { display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; font-weight: 600; letter-spacing: .1em; opacity: .75; margin-bottom: 6px; }
+  .detail .shelf .pr { font-family: "Special Elite", monospace; font-size: 9px; letter-spacing: .1em; border: 1px solid currentColor; border-radius: 2px; padding: 0 4px; }
+  .detail .shelf .item {
+    display: flex; align-items: center; gap: 8px; text-decoration: none; color: inherit;
+    padding: 6px 8px; margin-top: 5px; border-radius: 2px;
+    background: rgba(255,255,255,.28); border: 1px solid rgba(42,36,27,.18);
+    transition: background .2s, border-color .2s, transform .2s;
+  }
+  .detail .shelf .item:hover, .detail .shelf .item:focus-visible { background: rgba(255,255,255,.5); border-color: var(--stamp); transform: translateX(2px); outline: none; }
+  .detail .shelf .type {
+    flex: none; font-size: 9.5px; font-weight: 900; letter-spacing: .1em; color: var(--stamp);
+    border: 1.3px solid var(--stamp); border-radius: 2px; padding: 0 4px; transform: rotate(-4deg);
+  }
+  .detail .shelf .body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .detail .shelf .ti { font-size: 11.5px; font-weight: 600; line-height: 1.45; }
+  .detail .shelf .nt { font-size: 10px; opacity: .65; line-height: 1.4; }
+  .detail .shelf .go { flex: none; font-size: 11px; opacity: .6; }
 
   /* ---------- mobile ---------- */
   @media (max-width: 860px) {
@@ -484,6 +504,19 @@ const DETAILS = {
   flannan:   ["1900年、スコットランド沖の灯台から3人の灯台守が消えた。日誌には嵐の記述が残っていたとされるが、その夜の周辺は穏やかだったという。", "3人は、何を見に外へ出たのか。"],
   bellwitch: ["1817年から数年、テネシーの農家ベル家を「声」が悩ませたと伝わる。家長の死まで語られるが、記録の多くは後年にまとめられたものだ。", "声を残したのは、出来事か、語り手か。"],
   masakado:  ["討たれた平将門の首が飛来したと伝わる、大手町の塚。移転の話が持ち上がるたびに異変が語られ、今もオフィス街の一角に鎮座している。", "畏れは、この場所を守っているのか。"],
+};
+
+/* 関連資料の棚（見本）
+   type: 書籍 / 映像 / 雑誌、q: 検索語（見本は Amazon の検索結果へ。本番はアフィリエイトリンクの href に差し替える） */
+const RELATED = {
+  tut:     [{ type: "書籍", title: "ツタンカーメン王墓の発掘を記録した本", note: "発見の経緯を、当時の記録からたどる", q: "ツタンカーメン 発掘" },
+            { type: "映像", title: "王家の谷を扱ったドキュメンタリー", note: "現地の映像で、墓の構造を見る", q: "王家の谷 ドキュメンタリー" }],
+  oak:     [{ type: "書籍", title: "オーク島の宝探しを追った本", note: "230年の掘削の歴史をまとめて", q: "オーク島 宝" },
+            { type: "映像", title: "オーク島の発掘を追う番組", note: "現在も続く掘削の現場", q: "オーク島の呪い" }],
+  nessie:  [{ type: "書籍", title: "ネッシー目撃史をたどる本", note: "写真の真偽をめぐる記録", q: "ネッシー 本" },
+            { type: "雑誌", title: "未確認生物を特集するオカルト誌", note: "最新の調査や目撃談", q: "ムー 雑誌" }],
+  dyatlov: [{ type: "書籍", title: "ディアトロフ峠事件のノンフィクション", note: "現地取材をもとにした検証", q: "ディアトロフ峠 本" }],
+  bermuda: [{ type: "書籍", title: "バミューダ・トライアングルの検証本", note: "伝説と統計を並べて読む", q: "バミューダトライアングル 本" }],
 };
 
 /* 演出のタイミング（ミリ秒） */
@@ -776,6 +809,19 @@ const detailPadding = () => isMobile()
   : { right: detailPad(), left: 0, top: 0, bottom: 0 };
 const fileNo = f => String(FILES.length - FILES.indexOf(f)).padStart(3, "0");
 
+function shelfHtml(f) {
+  const items = RELATED[f.id];
+  if (!items || !items.length) return "";
+  const li = items.map(r => `
+      <a class="item" href="${r.href || "https://www.amazon.co.jp/s?k=" + encodeURIComponent(r.q)}" target="_blank" rel="noopener sponsored">
+        <span class="type">${r.type}</span>
+        <span class="body"><span class="ti">${r.title}</span><span class="nt">${r.note}</span></span>
+        <span class="go">→</span>
+      </a>`).join("");
+  return `<div class="shelf">
+      <div class="sh"><span>関連資料 ── この事件をもっと知る</span><span class="pr">PR</span></div>${li}
+    </div>`;
+}
 function renderDetail(f) {
   const [sum, q] = DETAILS[f.id] || ["", ""];
   const open = `<a class="open" href="${f.url}" target="_blank" rel="noopener">ファイルを開く →</a>`;
@@ -783,7 +829,7 @@ function renderDetail(f) {
       <div class="hd"><span>調書 No.${fileNo(f)} ／ ${catOf(f).label}｜${regionName(f)}</span><button type="button" class="close" title="地球儀へ戻る（Esc）"><span class="long">ファイルを</span>閉じる ×</button></div>
       <h3>${f.title}${f.caution ? '<span class="caution">閲覧注意</span>' : ""}</h3>
       <dl><dt>発生</dt><dd>${f.occurred}</dd><dt>現場</dt><dd>${f.site}</dd><dt>状況</dt><dd class="st">${f.stamp}</dd></dl>
-      <p>${sum}</p><div class="q">${q}</div>${open}</div>`;
+      <p>${sum}</p><div class="q">${q}</div>${shelfHtml(f)}${open}</div>`;
 }
 function showDetail(f) {
   detailFor = f;
